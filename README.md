@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # NicheScope
 
 Amazon product research and analytics for exploring a niche, tracking product snapshots, and comparing potential opportunities. NicheScope collects Amazon India (`amazon.in`) search and product details, stores each run in SQLite, scores the results, and presents them in a local dashboard.
@@ -138,3 +139,6 @@ Amazon and its affiliates do not sponsor or endorse this project. Use it at your
 ## Contributing and license
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and pull request guidance. This project is licensed under the MIT License; see [LICENSE](LICENSE).
+=======
+# amazon_scraper
+>>>>>>> bc93aa42ef3a35f67299712fc57c31be2541681b
