@@ -1,0 +1,5 @@
+-r requirements.txt
+
+# Offline test and conservative static checks.
+pytest
+ruff

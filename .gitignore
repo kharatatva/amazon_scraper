@@ -1,0 +1,44 @@
+# Python caches and tooling.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Local Python environments.
+.venv/
+venv/
+niche_finder/
+
+# Credentials and local configuration.
+.env
+.env.*
+!.env.example
+
+# Scrape data, databases, logs, and browser state.
+data/*
+!data/.gitkeep
+*.db
+*.sqlite
+*.sqlite3
+*.log
+playwright/.local-browsers/
+
+# Editors and operating systems.
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+tempCodeRunnerFile*
+**/_tmp_*
+
+# JavaScript package/build output.
+node_modules/
+dist/
+build/
+.vite/
+*.tsbuildinfo
+.pnpm-store/
+.manus-logs/
+.verify/
+

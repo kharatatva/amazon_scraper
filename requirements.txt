@@ -1,0 +1,9 @@
+# Browser automation and HTML parsing.
+beautifulsoup4~=4.15.0
+playwright~=1.64.0
+playwright-stealth~=2.0.3
+
+# HTTP API and outbound requests.
+fastapi~=0.141.1
+requests~=2.34.2
+uvicorn~=0.51.0
