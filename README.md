@@ -3,7 +3,7 @@
 
 Amazon product research and analytics for exploring a niche, tracking product snapshots, and comparing potential opportunities. NicheScope collects Amazon India (`amazon.in`) search and product details, stores each run in SQLite, scores the results, and presents them in a local dashboard.
 
-[![CI](https://github.com/kharatatva/amazon_data_scaper_and_analytics/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/kharatatva/amazon_data_scaper_and_analytics/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Python 3.13](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/downloads/)
+[![CI](https://github.com/kharatatva/amazon_scraper/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/kharatatva/amazon_scraper/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE) [![Python 3.13](https://img.shields.io/badge/python-3.13-blue.svg)](https://www.python.org/downloads/)
 
 ![NicheScope dashboard preview](nichescope-phase9/demo-dashboard-preview.png)
 
@@ -41,8 +41,8 @@ Each pipeline run has a `search_run_id` that ties together its products, snapsho
 The commands below use PowerShell. A live scrape sends requests to Amazon and validates public proxies; the dashboard and offline test suite do not scrape.
 
 ```powershell
-git clone https://github.com/kharatatva/amazon_data_scaper_and_analytics.git
-Set-Location amazon_data_scaper_and_analytics
+git clone https://github.com/kharatatva/amazon_scraper.git
+Set-Location amazon_scraper
 py -3.13 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
