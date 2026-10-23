@@ -448,6 +448,47 @@ MIT, as declared in the dashboard's `package.json`. Add a `LICENSE` file with yo
 <div align="center">
 <sub>Amazon and its affiliates do not sponsor or endorse this project.</sub>
 </div>
+<summary><b>Runs fail, stall or time out</b></summary>
+
+Proxies come from a free public list and are often slow or unavailable, so a failed run frequently succeeds when repeated. If it keeps failing, lower the two concurrency settings in `src/config.py`, or retry later.
+
+</details>
+
+<details>
+<summary><b>Amazon shows a CAPTCHA or "access denied" page</b></summary>
+
+Stop and wait. Do not push harder when access is denied. Reduce how much you scrape and try again later.
+
+</details>
+
+## Responsible use
+
+> [!WARNING]
+> Amazon may restrict automated access, and scraping may conflict with its terms. Review Amazon's terms and applicable laws before you run this project, keep request rates low, and stop if access is denied.
+
+- Use NicheScope for personal research and learning, and at your own risk.
+- Do not commit credentials, `.env` files, databases, logs, saved Amazon pages or scraped product data. The provided `.gitignore` excludes them.
+- Free public proxies can observe the traffic that passes through them. Do not send logins or personal data through them.
+- The marketplace is Amazon India (`amazon.in`).
+
+## Roadmap ideas
+
+These are ideas, not commitments:
+
+- Connect the dashboard to the live API and add the missing read endpoints (sellers, runs, schedules, analytics)
+- Command-line flags for the pipeline, so the dashboard can start runs
+- Make the test suite run offline against synthetic HTML
+- Support Amazon marketplaces other than `amazon.in`
+
+## License
+
+MIT, as declared in the dashboard's `package.json`. Add a `LICENSE` file with your name before publishing.
+
+<br>
+
+<div align="center">
+<sub>Amazon and its affiliates do not sponsor or endorse this project.</sub>
+</div>
 See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and pull request guidance. This project is licensed under the MIT License; see [LICENSE](LICENSE).
 =======
 # amazon_scraper
