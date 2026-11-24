@@ -7,7 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from src.scraper import product_detail, search
+from src.scraper import product_page_scraper, search_page_scraper
 from src.scraper.fetch import CaptchaDetectedError, ProxyFailureError
 
 
@@ -95,17 +95,17 @@ class StagePageRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     raise RuntimeError("isolated page failure")
                 return FakePage("saved page one")
 
-            with patch.object(search, "RENDERED_HTML_DIR", root), \
-                 patch.object(search, "Stealth", FakeStealth), \
-                 patch.object(search, "async_playwright", return_value=object()), \
-                 patch.object(search, "BrowserLifecycle", FakeLifecycle), \
-                 patch.object(search, "get_or_create_keyword", return_value=1), \
-                 patch.object(search, "get_or_create_niche", return_value=2), \
-                 patch.object(search, "link_niche_keyword"), \
-                 patch.object(search, "update_search_run"), \
-                 patch.object(search, "fetch_page", side_effect=fake_fetch), \
-                 patch.object(search.logger, "exception"):
-                result = await search.fetch_search_results(
+            with patch.object(search_page_scraper, "RENDERED_HTML_DIR", root), \
+                 patch.object(search_page_scraper, "Stealth", FakeStealth), \
+                 patch.object(search_page_scraper, "async_playwright", return_value=object()), \
+                 patch.object(search_page_scraper, "BrowserLifecycle", FakeLifecycle), \
+                 patch.object(search_page_scraper, "get_or_create_keyword", return_value=1), \
+                 patch.object(search_page_scraper, "get_or_create_niche", return_value=2), \
+                 patch.object(search_page_scraper, "link_niche_keyword"), \
+                 patch.object(search_page_scraper, "update_search_run"), \
+                 patch.object(search_page_scraper, "fetch_page", side_effect=fake_fetch), \
+                 patch.object(search_page_scraper.logger, "exception"):
+                result = await search_page_scraper.fetch_search_results(
                     "test niche", "test keyword", 2,
                     proxy=manager.healthy_proxies[0], run_id=41,
                     proxy_manager=manager,
@@ -129,16 +129,16 @@ class StagePageRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     raise CaptchaDetectedError("CAPTCHA challenge")
                 return FakePage("saved direct retry")
 
-            with patch.object(search, "RENDERED_HTML_DIR", root), \
-                 patch.object(search, "Stealth", FakeStealth), \
-                 patch.object(search, "async_playwright", return_value=object()), \
-                 patch.object(search, "BrowserLifecycle", FakeLifecycle), \
-                 patch.object(search, "get_or_create_keyword", return_value=1), \
-                 patch.object(search, "get_or_create_niche", return_value=2), \
-                 patch.object(search, "link_niche_keyword"), \
-                 patch.object(search, "update_search_run"), \
-                 patch.object(search, "fetch_page", side_effect=fake_fetch):
-                result = await search.fetch_search_results(
+            with patch.object(search_page_scraper, "RENDERED_HTML_DIR", root), \
+                 patch.object(search_page_scraper, "Stealth", FakeStealth), \
+                 patch.object(search_page_scraper, "async_playwright", return_value=object()), \
+                 patch.object(search_page_scraper, "BrowserLifecycle", FakeLifecycle), \
+                 patch.object(search_page_scraper, "get_or_create_keyword", return_value=1), \
+                 patch.object(search_page_scraper, "get_or_create_niche", return_value=2), \
+                 patch.object(search_page_scraper, "link_niche_keyword"), \
+                 patch.object(search_page_scraper, "update_search_run"), \
+                 patch.object(search_page_scraper, "fetch_page", side_effect=fake_fetch):
+                result = await search_page_scraper.fetch_search_results(
                     "test niche", "test keyword", 1,
                     proxy=manager.healthy_proxies[0], run_id=42,
                     proxy_manager=manager,
@@ -164,12 +164,12 @@ class StagePageRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     raise ProxyFailureError("confirmed tunnel failure")
                 return FakePage(f"saved {url}")
 
-            with patch.object(product_detail, "RENDERED_HTML_DIR", root), \
-                 patch.object(product_detail, "Stealth", FakeStealth), \
-                 patch.object(product_detail, "async_playwright", return_value=object()), \
-                 patch.object(product_detail, "BrowserLifecycle", FakeLifecycle), \
-                 patch.object(product_detail, "fetch_page", side_effect=fake_fetch):
-                count = await product_detail.fetch_product_detail(
+            with patch.object(product_page_scraper, "RENDERED_HTML_DIR", root), \
+                 patch.object(product_page_scraper, "Stealth", FakeStealth), \
+                 patch.object(product_page_scraper, "async_playwright", return_value=object()), \
+                 patch.object(product_page_scraper, "BrowserLifecycle", FakeLifecycle), \
+                 patch.object(product_page_scraper, "fetch_page", side_effect=fake_fetch):
+                count = await product_page_scraper.fetch_product_detail(
                     asin=["ASIN1", "ASIN2"],
                     product_url=["url-1", "url-2"],
                     niche_slug="test-niche",
@@ -198,12 +198,12 @@ class StagePageRecoveryTests(unittest.IsolatedAsyncioTestCase):
                     raise CaptchaDetectedError("CAPTCHA challenge")
                 return FakePage("saved direct retry")
 
-            with patch.object(product_detail, "RENDERED_HTML_DIR", root), \
-                 patch.object(product_detail, "Stealth", FakeStealth), \
-                 patch.object(product_detail, "async_playwright", return_value=object()), \
-                 patch.object(product_detail, "BrowserLifecycle", FakeLifecycle), \
-                 patch.object(product_detail, "fetch_page", side_effect=fake_fetch):
-                count = await product_detail.fetch_product_detail(
+            with patch.object(product_page_scraper, "RENDERED_HTML_DIR", root), \
+                 patch.object(product_page_scraper, "Stealth", FakeStealth), \
+                 patch.object(product_page_scraper, "async_playwright", return_value=object()), \
+                 patch.object(product_page_scraper, "BrowserLifecycle", FakeLifecycle), \
+                 patch.object(product_page_scraper, "fetch_page", side_effect=fake_fetch):
+                count = await product_page_scraper.fetch_product_detail(
                     asin=["ASIN1"],
                     product_url=["url-1"],
                     niche_slug="test-niche",
