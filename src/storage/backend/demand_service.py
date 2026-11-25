@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-import subprocess
 import sqlite3
-import sys
 import threading
 import time
 from datetime import datetime, timedelta, timezone as datetime_timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from src.config import PROJECT_ROOT
+from src import config as scraper_config
 from src.logger import logger
+from src.storage.backend.environment_setup import get_environment_status
 from src.storage.db import get_connection, update_search_run
 from src.storage.queries import create_running_search_run
+from src.storage.backend.job_manager import enqueue_existing_scrape_run
 
 _worker_lock = threading.Lock()
 _worker_started = False
@@ -69,27 +69,25 @@ def _claim_schedule(schedule_id: int, slot_key: str) -> bool:
 
 def _launch_scheduled_run(schedule) -> None:
     run_id = create_running_search_run(int(schedule["niche_id"]), int(schedule["keyword_id"]))
-    command = [
-        sys.executable, "scripts/run_full_pipeline.py",
-        "--run-id", str(run_id),
-        "--pages", str(schedule["pages"]),
-        "--products", str(schedule["products"]),
-    ]
     try:
-        subprocess.Popen(command, cwd=PROJECT_ROOT)
-        logger.info("Scheduled pipeline launched | schedule_id=%s | run_id=%s", schedule["id"], run_id)
-    except OSError:
-        logger.exception("Could not launch scheduled pipeline | schedule_id=%s | run_id=%s", schedule["id"], run_id)
+        pages = min(int(schedule["pages"]), scraper_config.MAX_PAGES_TO_CRAWL)
+        products = min(int(schedule["products"]), scraper_config.MAX_DETAIL_PAGES_PER_RUN)
+        enqueue_existing_scrape_run(run_id, pages, products)
+        logger.info("Scheduled pipeline queued | schedule_id=%s | run_id=%s", schedule["id"], run_id)
+    except (OSError, ValueError):
+        logger.exception("Could not queue scheduled pipeline | schedule_id=%s | run_id=%s", schedule["id"], run_id)
         update_search_run(
             search_run_id=run_id,
             status="failed",
             current_stage="failed",
-            notes="Could not launch scheduled pipeline subprocess.",
+            notes="Could not queue scheduled pipeline.",
         )
 
 
 def run_due_schedules(now: datetime | None = None) -> int:
     """Claim and launch schedule slots matching the current local minute."""
+    if not get_environment_status()["scraper_ready"]:
+        return 0
     conn = get_connection()
     try:
         conn.row_factory = sqlite3.Row

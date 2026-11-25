@@ -155,6 +155,7 @@ button { border: 0; }
 
 .status-pill { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; padding: 4px 7px; border: 1px solid transparent; border-radius: 5px; font-size: 10px; font-weight: 600; }
 .status-pill-dot { width: 5px; height: 5px; border-radius: 999px; }
+.status-queued { color: #cbd5e1; border-color: rgba(148,163,184,.13); background: rgba(148,163,184,.06); }.status-queued .status-pill-dot { background: #94a3b8; }
 .status-success { color: #86efac; border-color: rgba(74,222,128,.15); background: rgba(74,222,128,.08); }.status-success .status-pill-dot { background: #4ade80; }
 .status-partial { color: #fcd34d; border-color: rgba(251,191,36,.15); background: rgba(251,191,36,.08); }.status-partial .status-pill-dot { background: #fbbf24; }
 .status-failed { color: #fda4af; border-color: rgba(251,113,133,.15); background: rgba(251,113,133,.08); }.status-failed .status-pill-dot { background: #fb7185; }

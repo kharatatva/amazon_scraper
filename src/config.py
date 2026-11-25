@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import re
+import json
 
 # ==================================================
 # PROJECT PATHS
@@ -14,10 +15,6 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = PROJECT_ROOT / "data"
 
 LOG_DIR = PROJECT_ROOT / "data" / "logs"
-
-LOG_DIR.mkdir(parents=True, exist_ok=True)
-
-
 
 # ==================================================
 # Project Paths
@@ -306,4 +303,50 @@ SCORE_WEIGHTS = {
     "competition": 0.3,
     "quality_gap": 0.3,
 }
+
+
+# Dashboard-managed overrides are kept separately from this source file so
+# scraper behavior can be changed from the UI without editing Python code.
+SCRAPER_SETTINGS_FILE = DATA_DIR / "scraper_settings.json"
+
+
+def _serializable_dashboard_value(value):
+    """Return whether a config value can safely be represented in JSON."""
+    if isinstance(value, (str, bool, int, float)):
+        return True
+    if isinstance(value, list):
+        return all(_serializable_dashboard_value(item) for item in value)
+    if isinstance(value, dict):
+        return all(
+            isinstance(key, str) and _serializable_dashboard_value(item)
+            for key, item in value.items()
+        )
+    return False
+
+
+_DASHBOARD_SETTING_DEFAULTS = {
+    key: value
+    for key, value in list(globals().items())
+    if key.isupper()
+    and key not in {"SCRAPER_SETTINGS_FILE"}
+    and _serializable_dashboard_value(value)
+}
+
+
+def get_dashboard_setting_defaults():
+    """Return JSON-safe code defaults for dashboard-editable settings."""
+    return json.loads(json.dumps(_DASHBOARD_SETTING_DEFAULTS))
+
+
+try:
+    with SCRAPER_SETTINGS_FILE.open("r", encoding="utf-8") as _settings_file:
+        _saved_dashboard_settings = json.load(_settings_file)
+except (OSError, json.JSONDecodeError):
+    _saved_dashboard_settings = {}
+
+if isinstance(_saved_dashboard_settings, dict):
+    for _setting_name, _setting_value in _saved_dashboard_settings.items():
+        _setting_default = _DASHBOARD_SETTING_DEFAULTS.get(_setting_name)
+        if _setting_name in _DASHBOARD_SETTING_DEFAULTS and type(_setting_value) is type(_setting_default):
+            globals()[_setting_name] = _setting_value
 

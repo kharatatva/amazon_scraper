@@ -5,6 +5,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { DashboardLayout } from "./components/dashboard";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { SettingsProvider } from "./contexts/SettingsContext";
+import { EnvironmentProvider } from "./components/EnvironmentSetup";
 import {
   AnalyticsPage,
   ErrorsPage,
@@ -60,10 +61,10 @@ function AppSurface() {
 function App() {
   return <ErrorBoundary>
     <ThemeProvider defaultTheme="dark">
-      <SettingsProvider><TooltipProvider>
+      <SettingsProvider><EnvironmentProvider><TooltipProvider>
         <Toaster theme="dark" />
         <AppSurface />
-      </TooltipProvider></SettingsProvider>
+      </TooltipProvider></EnvironmentProvider></SettingsProvider>
     </ThemeProvider>
   </ErrorBoundary>;
 }

@@ -37,6 +37,7 @@ import {
   Zap,
 } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { EnvironmentNotice, FirstRunSetup } from "@/components/EnvironmentSetup";
 import { Area, AreaChart, CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
@@ -192,7 +193,7 @@ function GlobalSearch() {
 export function DashboardLayout({ children }: { children: ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  return <div className="app-shell"><AppSidebar collapsed={collapsed} onToggle={() => setCollapsed((value) => !value)} mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} /><div className={`main-shell ${collapsed ? "main-shell-expanded" : ""}`}><TopBar onMenu={() => setMobileOpen(true)} /><main className="page-content">{children}</main></div></div>;
+  return <div className="app-shell"><AppSidebar collapsed={collapsed} onToggle={() => setCollapsed((value) => !value)} mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} /><div className={`main-shell ${collapsed ? "main-shell-expanded" : ""}`}><TopBar onMenu={() => setMobileOpen(true)} /><EnvironmentNotice /><main className="page-content">{children}</main></div><FirstRunSetup /></div>;
 }
 
 export function PageHeader({ eyebrow, title, description, actions }: { eyebrow?: string; title: string; description?: string; actions?: ReactNode }) {
@@ -209,7 +210,7 @@ export function MetricCard({ label, value, change, changeLabel, icon: Icon, acce
 
 export function StatusPill({ status }: { status: RunStatus | "Idle" | "Healthy" | "Warning" | "Error" | "Unknown" }) {
   const config: Record<string, { label: string; cls: string }> = {
-    success: { label: "Success", cls: "status-success" }, partial: { label: "Partial", cls: "status-partial" }, failed: { label: "Failed", cls: "status-failed" }, running: { label: "Running", cls: "status-running" }, Idle: { label: "Idle", cls: "status-idle" }, Healthy: { label: "Healthy", cls: "status-success" }, Warning: { label: "Warning", cls: "status-partial" }, Error: { label: "Error", cls: "status-failed" }, Unknown: { label: "Unknown", cls: "status-idle" },
+    queued: { label: "Queued", cls: "status-queued" }, success: { label: "Success", cls: "status-success" }, partial: { label: "Partial", cls: "status-partial" }, failed: { label: "Failed", cls: "status-failed" }, running: { label: "Running", cls: "status-running" }, Idle: { label: "Idle", cls: "status-idle" }, Healthy: { label: "Healthy", cls: "status-success" }, Warning: { label: "Warning", cls: "status-partial" }, Error: { label: "Error", cls: "status-failed" }, Unknown: { label: "Unknown", cls: "status-idle" },
   };
   const item = config[status] ?? config.Unknown;
   return <span className={`status-pill ${item.cls}`}><span className="status-pill-dot" />{item.label}</span>;

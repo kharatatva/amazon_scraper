@@ -2,8 +2,10 @@
 
 import asyncio
 import argparse
+import os
 import sys
 from pathlib import Path
+from datetime import datetime, timezone
 
 
 # ============================================================
@@ -44,8 +46,11 @@ from scripts.run_scoring import run_scoring
 
 from src.storage.db import (
     get_search_run_context,
+    get_search_run_config,
+    get_search_run_metrics,
     log_scrape_error,
     update_search_run,
+    update_search_run_execution,
 )
 
 
@@ -77,10 +82,19 @@ def update_stage(
         f"[PIPELINE] run_id={run_id} "
         f"current_stage={stage}"
     )
+    current_tasks = {
+        STAGE_SEARCH: "Collecting search pages",
+        STAGE_PRODUCT_DETAIL: "Scraping product detail pages",
+        STAGE_PARSING: "Parsing captured product data",
+        STAGE_SCORING: "Calculating opportunity scores",
+        STAGE_COMPLETED: "Pipeline completed",
+        STAGE_FAILED: "Pipeline failed",
+    }
 
     update_search_run(
         search_run_id=run_id,
         current_stage=stage,
+        current_task=current_tasks.get(stage, stage.replace("_", " ").title()),
     )
 
 
@@ -217,6 +231,7 @@ async def run_search_stage(
         proxy=proxy,
         run_id=run_id,
         proxy_manager=proxy_manager,
+        keep_run_active=True,
     )
 
     if not search_run_id:
@@ -377,6 +392,11 @@ async def run_scraping_pipeline(
     update_stage(
         search_run_id,
         STAGE_PRODUCT_DETAIL,
+    )
+    update_search_run(
+        search_run_id=search_run_id,
+        status="running",
+        current_task="Scraping product detail pages",
     )
 
     # --------------------------------------------------------
@@ -658,9 +678,25 @@ async def _run_pipeline(
         # COMPLETED
         # ----------------------------------------------------
 
-        update_stage(
+        run_config = get_search_run_config(search_run_id)
+        run_metrics = get_search_run_metrics(search_run_id)
+        expected_pages = run_config.get("effective_num_pages", num_pages)
+        final_status = (
+            "partial"
+            if parser_result.get("status") == "partial"
+            or parser_result.get("status") == "failed"
+            or run_metrics["pages_scraped"] < expected_pages
+            else "success"
+        )
+        update_search_run_execution(
             search_run_id,
-            STAGE_COMPLETED,
+            finished_at=datetime.now(timezone.utc).isoformat(),
+        )
+        update_search_run(
+            search_run_id=search_run_id,
+            status=final_status,
+            current_stage=STAGE_COMPLETED,
+            current_task="Pipeline completed",
         )
 
         logger.info(
@@ -697,12 +733,24 @@ def main() -> None:
     parser.add_argument("--products", type=int, help="Maximum products to detail scrape.")
     parser.add_argument("--niche", help="Niche name.")
     parser.add_argument("--keyword", help="Search keyword.")
+    parser.add_argument(
+        "--backend-managed",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
     args = parser.parse_args()
 
     try:
         if args.run_id is not None:
             if args.pages is None:
                 parser.error("--pages is required with --run-id.")
+            if args.backend_managed:
+                update_search_run_execution(
+                    args.run_id,
+                    managed=True,
+                    process_id=os.getpid(),
+                    started_at=datetime.now(timezone.utc).isoformat(),
+                )
             context = get_search_run_context(args.run_id)
             niche_name = context["niche_slug"]
             keyword = context["keyword"]

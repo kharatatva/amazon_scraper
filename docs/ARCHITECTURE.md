@@ -128,6 +128,7 @@ The FastAPI app is `src.storage.backend.main:app`; it mounts the scrape router f
 | GET | `/api/sellers/{seller_id}` |
 | GET | `/api/runs` |
 | GET | `/api/runs/{run_id}` |
+| GET | `/api/runs/{run_id}/logs` |
 | GET | `/api/errors` |
 | GET | `/api/schedules` |
 | DELETE | `/api/schedules/{schedule_id}` |
@@ -139,7 +140,7 @@ The FastAPI app is `src.storage.backend.main:app`; it mounts the scrape router f
 | GET | `/api/analytics` |
 | POST | `/api/scrape/start` |
 
-The scrape-start handler validates IDs and limits, creates a run, launches the pipeline subprocess, and optionally upserts a recurring schedule. The API does not implement application login or authentication.
+The scrape-start handler accepts either existing niche/keyword IDs or a niche name with one or more keywords. It validates supported limits, creates or reuses niche and keyword records, and queues one persisted run per keyword. A single backend worker launches the fixed `scripts/run_full_pipeline.py` entry point with a run ID, page limit, and product limit. Run state and counters come from `search_runs`, snapshots, and `scrape_errors`; each process writes captured output to `data/logs/runs/<run_id>.log`, exposed through the run-logs endpoint. The worker serializes runs and reports interrupted managed jobs as failed after a backend restart. The API does not implement application login or authentication.
 
 ## Scoring and storage
 

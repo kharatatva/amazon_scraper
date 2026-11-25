@@ -13,6 +13,70 @@ export interface RunFilters {
   page?: number; page_size?: number; niche_id?: number; keyword_id?: number;
   status?: RunStatus; start_date?: string; end_date?: string;
 }
+export type ScrapeStartPayload =
+  | { nicheName: string; keywords: string[]; pages: number; products: number }
+  | { nicheId: number; keywordId: number; pages: number; products: number; recurring: boolean; frequency: "daily" | "weekly" };
+
+export interface ScraperSettingField {
+  key: string;
+  label: string;
+  group: string;
+  description: string;
+  kind: "number" | "boolean" | "text" | "json";
+  default: unknown;
+  minimum?: number;
+  maximum?: number;
+  step?: number;
+}
+
+export interface ScraperSettingsData {
+  settings: Record<string, unknown>;
+  defaults: Record<string, unknown>;
+  groups: string[];
+  fields: ScraperSettingField[];
+  system: Record<string, string>;
+}
+
+export type EnvironmentComponentStatus = "ready" | "missing" | "error" | "unknown";
+
+export interface EnvironmentComponent {
+  id: string;
+  name: string;
+  status: EnvironmentComponentStatus;
+  required: boolean;
+  message: string;
+}
+
+export interface EnvironmentSnapshot {
+  ready: boolean;
+  scraper_ready: boolean;
+  checked_at: string;
+  components: EnvironmentComponent[];
+  issues: Array<{ id: string; name: string; message: string }>;
+}
+
+export interface EnvironmentOperation {
+  id: string;
+  status: "running" | "completed" | "failed";
+  stage: string | null;
+  progress: number;
+  completed: number;
+  total: number;
+  message: string;
+  error: string | null;
+  updated_at: string;
+  stages: Array<{
+    id: string;
+    name: string;
+    status: "pending" | "running" | "ready" | "error";
+    message: string;
+  }>;
+}
+
+export interface EnvironmentResponse {
+  environment: EnvironmentSnapshot;
+  operation: EnvironmentOperation | null;
+}
 
 function queryString(values: Record<string, string | number | boolean | undefined | null>) {
   const params = new URLSearchParams();
@@ -53,11 +117,18 @@ export const api = {
   getRun: (id: number) => request<SearchRun & { errors: ScrapeError[] }>(`/runs/${id}`),
   getErrors: (runId?: number, page = 1, pageSize = 50) => request<PageResult<ScrapeError>>(`/errors${queryString({ run_id: runId, page, page_size: pageSize })}`),
   getSchedules: () => request<Schedule[]>("/schedules"),
+  getRunLogs: (id: number) => request<{ run_id: number; lines: string[] }>(`/runs/${id}/logs`),
   deleteSchedule: (id: number) => request<{ deleted: boolean }>(`/schedules/${id}`, { method: "DELETE" }),
   getDemand: (nicheId?: number, page = 1, pageSize = 100) => request<DemandTrackerData>(`/demand${queryString({ niche_id: nicheId, page, page_size: pageSize })}`),
   createDemandSchedule: (payload: { nicheId: number; keywordId: number; pages: number; products: number; runTimes: string; timezone?: string }) => request<{ id: number; active: boolean; runTimes: string; timezone: string }>("/demand/schedules", { method: "POST", body: JSON.stringify(payload) }),
   startDemandBackfill: () => request<DemandBackfillJob>("/demand/backfill", { method: "POST", body: JSON.stringify({}) }),
   getDemandBackfill: () => request<DemandBackfillJob | null>("/demand/backfill"),
+  getScraperSettings: () => request<ScraperSettingsData>("/scraper/settings"),
+  getEnvironment: () => request<EnvironmentResponse>("/environment"),
+  checkEnvironment: () => request<EnvironmentResponse>("/environment/check", { method: "POST", body: JSON.stringify({}) }),
+  initializeEnvironment: (repair = false) => request<EnvironmentResponse>("/environment/initialize", { method: "POST", body: JSON.stringify({ repair }) }),
+  saveScraperSettings: (settings: Record<string, unknown>) => request<ScraperSettingsData>("/scraper/settings", { method: "PUT", body: JSON.stringify({ settings }) }),
+  resetScraperSettings: () => request<ScraperSettingsData>("/scraper/settings/reset", { method: "POST", body: JSON.stringify({}) }),
   getHistory: (productId: number, nicheId?: number, startDate?: string, endDate?: string) => request<HistoryPoint[]>(`/products/${productId}/history${queryString({ niche_id: nicheId, start_date: startDate, end_date: endDate })}`),
   getAnalytics: (nicheId?: number, startDate?: string, endDate?: string, limit = 5000, currency?: string) => request<{
     items: AnalyticsPoint[]; total_returned: number; unique_products: number; scored_products: number;
@@ -79,5 +150,5 @@ export const api = {
     review_distribution: Array<{ label: string; count: number }>;
   }>(`/analytics${queryString({ niche_id: nicheId, start_date: startDate, end_date: endDate, limit, currency })}`),
   getKeywords: async (nicheId: number) => (await request<Niche>(`/niches/${nicheId}`)).keywords,
-  startScrape: (payload: { nicheId: number; keywordId: number; pages: number; products: number; recurring: boolean; frequency: "daily" | "weekly" }) => request<{ accepted: boolean; runId: number }>("/scrape/start", { method: "POST", body: JSON.stringify(payload) }),
+  startScrape: (payload: ScrapeStartPayload) => request<{ accepted: boolean; runId: number; runIds: number[] }>("/scrape/start", { method: "POST", body: JSON.stringify(payload) }),
 };

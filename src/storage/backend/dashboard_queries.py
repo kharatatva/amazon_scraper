@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sqlite3
 from contextlib import closing
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import quote
@@ -487,10 +488,17 @@ def _list_runs_conn(conn: sqlite3.Connection, *, niche_id: int | None = None,
                     page: int = 1, page_size: int = 50) -> dict[str, Any]:
     clauses: list[str] = []
     params: list[Any] = []
-    for col, value in (("sr.niche_id", niche_id), ("sr.keyword_id", keyword_id), ("sr.status", status)):
+    for col, value in (("sr.niche_id", niche_id), ("sr.keyword_id", keyword_id)):
         if value is not None:
             clauses.append(f"{col}=?")
             params.append(value)
+    if status == "queued":
+        clauses.append("sr.status='running' AND sr.current_stage='queued'")
+    elif status == "running":
+        clauses.append("sr.status='running' AND COALESCE(sr.current_stage,'')<>'queued'")
+    elif status is not None:
+        clauses.append("sr.status=?")
+        params.append(status)
     if start_date:
         clauses.append("date(sr.run_timestamp)>=date(?)")
         params.append(start_date)
@@ -503,7 +511,8 @@ def _list_runs_conn(conn: sqlite3.Connection, *, niche_id: int | None = None,
     ).fetchone()[0]
     rows = conn.execute(
         f"""SELECT sr.id,sr.niche_id,n.name AS niche_name,sr.keyword_id,k.text AS keyword,
-                  sr.run_timestamp,sr.pages_scraped,sr.products_found,sr.status,
+                  sr.run_timestamp,sr.pages_scraped,sr.products_found,
+                  CASE WHEN sr.status='running' AND sr.current_stage='queued' THEN 'queued' ELSE sr.status END AS status,
                   sr.current_stage,sr.current_task,sr.notes,
                   (SELECT COUNT(*) FROM scrape_errors e WHERE e.search_run_id=sr.id) AS error_count
              FROM search_runs sr JOIN niches n ON n.id=sr.niche_id
@@ -526,7 +535,9 @@ def get_run(run_id: int) -> dict[str, Any] | None:
         # Fetch the selected run independently to keep its errors at one-to-many cardinality.
         row = conn.execute(
             """SELECT sr.id,sr.niche_id,n.name AS niche_name,sr.keyword_id,k.text AS keyword,
-                      sr.run_timestamp,sr.pages_scraped,sr.products_found,sr.status,
+                      sr.run_timestamp,sr.pages_scraped,sr.products_found,
+                      CASE WHEN sr.status='running' AND sr.current_stage='queued' THEN 'queued' ELSE sr.status END AS status,
+                      sr.config_json,
                       sr.current_stage,sr.current_task,sr.notes
                  FROM search_runs sr JOIN niches n ON n.id=sr.niche_id
                  LEFT JOIN keywords k ON k.id=sr.keyword_id WHERE sr.id=?""", (run_id,)
@@ -534,6 +545,35 @@ def get_run(run_id: int) -> dict[str, Any] | None:
         if row is None:
             return None
         run = dict(row)
+        try:
+            config = json.loads(run.pop("config_json") or "{}")
+        except (TypeError, json.JSONDecodeError):
+            config = {}
+        execution = config.get("_nichescope", {}) if isinstance(config, dict) else {}
+        if not isinstance(execution, dict):
+            execution = {}
+        run["requested_pages"] = execution.get("requested_pages")
+        run["requested_products"] = execution.get("requested_products")
+        run["started_at"] = execution.get("started_at")
+        run["finished_at"] = execution.get("finished_at")
+        start_value = execution.get("started_at")
+        end_value = execution.get("finished_at")
+        if start_value:
+            try:
+                started = datetime.fromisoformat(start_value.replace("Z", "+00:00"))
+                finished = (
+                    datetime.fromisoformat(end_value.replace("Z", "+00:00"))
+                    if end_value
+                    else datetime.now(timezone.utc)
+                )
+                run["duration_seconds"] = max(0, int((finished - started).total_seconds()))
+            except (AttributeError, TypeError, ValueError):
+                run["duration_seconds"] = None
+        else:
+            run["duration_seconds"] = 0 if run["status"] == "queued" else None
+        run["products_processed"] = conn.execute(
+            "SELECT COUNT(*) FROM snapshots WHERE search_run_id=?", (run_id,)
+        ).fetchone()[0]
         run["error_count"] = conn.execute("SELECT COUNT(*) FROM scrape_errors WHERE search_run_id=?", (run_id,)).fetchone()[0]
         run["errors"] = [dict(item) for item in conn.execute(
             "SELECT id,search_run_id,url,error_type,error_message,attempt_number,occurred_at FROM scrape_errors WHERE search_run_id=? ORDER BY occurred_at DESC,id DESC",

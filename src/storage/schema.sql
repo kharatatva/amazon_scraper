@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS sellers (
 -- Search Runs
 -- ==================================================
 
-CREATE TABLE search_runs (
+CREATE TABLE IF NOT EXISTS search_runs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 niche_id INTEGER NOT NULL REFERENCES niches(id),
                 keyword_id INTEGER REFERENCES keywords(id),

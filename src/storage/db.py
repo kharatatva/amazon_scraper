@@ -261,6 +261,82 @@ def update_search_run(
         conn.close()
 
 
+def get_search_run_config(search_run_id: int) -> dict:
+    """Return a run's stored configuration as a dictionary."""
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            "SELECT config_json FROM search_runs WHERE id = ?",
+            (search_run_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError(f"Search run {search_run_id} does not exist.")
+        if not row[0]:
+            return {}
+        try:
+            value = json.loads(row[0])
+        except (TypeError, json.JSONDecodeError):
+            return {}
+        return value if isinstance(value, dict) else {}
+    finally:
+        conn.close()
+
+
+def get_search_run_metrics(search_run_id: int) -> dict:
+    """Return persisted search counts and scrape-error count for a run."""
+    conn = get_connection()
+    try:
+        row = conn.execute(
+            """SELECT pages_scraped,products_found,
+                      (SELECT COUNT(*) FROM scrape_errors WHERE search_run_id=?) AS error_count
+                 FROM search_runs WHERE id=?""",
+            (search_run_id, search_run_id),
+        ).fetchone()
+        if row is None:
+            raise ValueError(f"Search run {search_run_id} does not exist.")
+        return {
+            "pages_scraped": row[0] or 0,
+            "products_found": row[1] or 0,
+            "error_count": row[2] or 0,
+        }
+    finally:
+        conn.close()
+
+
+def update_search_run_execution(search_run_id: int, **metadata) -> None:
+    """Merge backend execution metadata without replacing scraper settings."""
+    conn = get_connection()
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT config_json FROM search_runs WHERE id = ?",
+            (search_run_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError(f"Search run {search_run_id} does not exist.")
+        try:
+            config = json.loads(row[0]) if row[0] else {}
+        except (TypeError, json.JSONDecodeError):
+            config = {}
+        if not isinstance(config, dict):
+            config = {}
+        execution = config.get("_nichescope")
+        if not isinstance(execution, dict):
+            execution = {}
+        execution.update(metadata)
+        config["_nichescope"] = execution
+        conn.execute(
+            "UPDATE search_runs SET config_json = ? WHERE id = ?",
+            (json.dumps(config, ensure_ascii=False, sort_keys=True), search_run_id),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
 
 
 

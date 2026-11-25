@@ -43,8 +43,8 @@ A run takes a niche and a search keyword, collects the first pages of Amazon Ind
 | **Structured storage** | Products, sellers, keywords and snapshots in SQLite, managed with numbered migrations. |
 | **Opportunity scoring** | Demand, competition and quality gap, combined into one score with configurable weights. |
 | **Resumable pipeline** | Every run has a `search_run_id`, a status and a current stage, so progress and failures are traceable. |
-| **FastAPI backend** | Read endpoints for niches, runs, ranked opportunities and product history. |
-| **React dashboard** | A Vite and React interface. It currently runs on bundled demo data. See [Project status](#project-status). |
+| **FastAPI backend** | Dashboard read APIs plus a validated, queued execution API for the existing scraper pipeline. |
+| **React dashboard** | A Vite and React interface backed by the local FastAPI and SQLite service. |
 
 ## How it works
 
@@ -90,22 +90,23 @@ flowchart TB
 | Requirement | Version |
 | :--- | :--- |
 | Python | 3.13 |
-| Node.js | 20.19 or newer (dashboard only; Vite 7) |
+| Node.js | 20.19+ or 22.12+ (dashboard only; Vite 7) |
 | pnpm | 10.4.1 (dashboard only) |
-| Chromium | Installed through Playwright, as shown below |
+| Chromium | Installed or verified from the dashboard during first-run setup |
+
+On Windows, install Python 3.13 and Node.js 20.19+ or 22.12+, then launch from the repository folder. In PowerShell, run `.\start-dashboard.bat` (or `Start-Process -FilePath "$PWD\start-dashboard.bat"` to open it separately); in Command Prompt, run `start "" "%CD%\start-dashboard.bat"`. The launcher creates the project virtual environment, installs missing Python or dashboard packages, starts the API and dashboard, and opens the browser. On first launch, use the dashboard setup screen to initialize SQLite and install or verify Playwright Chromium; later checks and repairs are available under **Settings → Environment Setup & Maintenance**. Existing database contents and valid scraper settings are preserved.
+
+On macOS or Linux, run `bash start-dashboard.sh` after installing the same Python and Node.js versions. It performs the same local bootstrap and opens the dashboard when available.
 
 > [!NOTE]
-> The commands use PowerShell; macOS and Linux equivalents follow. A live scrape sends requests to Amazon and fetches a public proxy list. The dashboard does not scrape.
+> The launchers are for local use. A live scrape sends requests to Amazon and fetches a public proxy list. The browser submits jobs to the local API; its worker runs the Python scraper.
 
-**1. Install**
+**1. Launch the dashboard**
 
 ```powershell
 git clone https://github.com/kharatatva/amazon_scraper.git
 Set-Location amazon_scraper
-py -3.13 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -r requirements.txt
-python -m playwright install chromium
+.\start-dashboard.bat
 ```
 
 <details>
@@ -114,26 +115,23 @@ python -m playwright install chromium
 ```bash
 git clone https://github.com/kharatatva/amazon_scraper.git
 cd amazon_scraper
-python3.13 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
-python -m playwright install chromium   # on Linux you may need: --with-deps chromium
+bash start-dashboard.sh
 ```
-
-Later commands are the same on every platform, except `Set-Location` (use `cd`).
 
 </details>
 
-**2. Create the database**
+**2. Initialize in the dashboard**
 
-```powershell
-python -m src.storage.init_db
-python -m src.storage.migrations
-```
+On a fresh checkout, the API creates the local data folders, initializes SQLite, applies available migrations, and opens the first-run setup screen. Choose **Initialize environment** to install or verify Playwright Chromium and run the remaining readiness checks. No database or browser setup commands are required. To check or repair the environment later, open **Settings → Environment Setup & Maintenance**.
 
-`init_db` creates the baseline schema (migration `0001`); `migrations` applies every later numbered file in `migrations/` once and records it in `schema_migrations`.
+**3. Start a scrape**
 
-**3. Run your first scrape**
+Open **Scraper** in the dashboard, enter a niche and one or more Amazon search keywords, then select **Start scraping**. Each keyword is queued as a separate run and progress appears in the dashboard.
+
+<details>
+<summary><b>Run the Python pipeline manually</b></summary>
+
+The launchers create `.venv` and install runtime packages. After activating that environment, you can still run the pipeline directly:
 
 ```powershell
 python scripts/run_full_pipeline.py
@@ -156,6 +154,8 @@ python scripts/run_parser.py <search_run_id>
 python scripts/run_scoring.py
 python scripts/verify_schema.py
 ```
+
+</details>
 
 ## Dashboard
 
@@ -183,10 +183,10 @@ Open the URL Vite prints (port `3000` is preferred; Vite picks the next free por
 | **Products** | Browse products with price, rating, reviews and rank history |
 | **Sellers** | See who sells in a niche and how many products they hold |
 | **Analytics** | Compare signals across niches and products |
-| **Scraper** | Configure and monitor scrape runs (demo controls for now) |
+| **Scraper** | Create niches and keywords, queue the real pipeline, and monitor stored progress and logs |
 
 > [!IMPORTANT]
-> The dashboard ships in **demo mode** (`VITE_API_MODE=mock`): it displays bundled sample data and does not read your database yet. The FastAPI endpoints below work on their own and are documented at `http://127.0.0.1:8000/docs` while the API runs.
+> The dashboard reads the project SQLite database through FastAPI. Start both the API and Vite server as described above to browse stored results and launch scraper runs.
 
 | Endpoint | Returns |
 | :--- | :--- |
@@ -196,9 +196,11 @@ Open the URL Vite prints (port `3000` is preferred; Vite picks the next free por
 | `GET /api/products/{product_id}` | Product detail |
 | `GET /api/products/{product_id}/price-history` | Price history |
 | `GET /api/products/{product_id}/rank-history?niche_id=` | Rank history within a niche |
+| `POST /api/scrape/start` | Queue runs for one or more keywords under a niche |
+| `GET /api/runs/{run_id}/logs` | Recent captured scraper output |
 
 > [!WARNING]
-> The API has no authentication. Keep it bound to `127.0.0.1`. Its CORS policy currently allows only `http://localhost:5173`.
+> The API has no authentication. Keep it bound to `127.0.0.1`. Its CORS policy allows the local Vite origins `http://localhost:3000`, `http://127.0.0.1:3000` and `http://localhost:5173`.
 
 ## How scoring works
 
@@ -360,10 +362,9 @@ amazon_scraper/
 
 ## Project status
 
-NicheScope is a working scraper, parser, scorer and read-only API. These parts are still unfinished:
+NicheScope includes a working scraper, parser, scorer, local FastAPI service, and React dashboard. The dashboard can queue real scraper runs for new or saved niches and keywords:
 
-- **Dashboard is demo-only.** The React app uses bundled sample data. Connecting it to the FastAPI endpoints is the next step, and the CORS origin in `src/storage/backend/main.py` must then include the Vite port.
-- **Scrape-from-dashboard is not wired up.** `src/storage/backend/routes/scrape.py` is not mounted in `main.py`, and it passes `--run-id`, `--pages` and `--products` flags that `scripts/run_full_pipeline.py` does not accept yet. It has no argument parser; the script only prompts interactively.
+- **Amazon India only.** Search URLs are fixed to `amazon.in`.
 - **Tests are not hermetic yet.** Several tests read captured HTML from a local `data/rendered_html/` folder or your real database, so `pytest` is not expected to pass on a fresh clone. Lint (`ruff check`) also reports open findings.
 - **Only `amazon.in` is supported.** Search URLs are hard-coded to it.
 
@@ -434,9 +435,7 @@ Stop and wait. Do not push harder when access is denied. Reduce how much you scr
 
 These are ideas, not commitments:
 
-- Connect the dashboard to the live API and add the missing read endpoints (sellers, runs, schedules, analytics)
-- Command-line flags for the pipeline, so the dashboard can start runs
-- Make the test suite run offline against synthetic HTML
+- Expand offline integration coverage for the dashboard job lifecycle
 - Support Amazon marketplaces other than `amazon.in`
 
 ## License
@@ -475,9 +474,7 @@ Stop and wait. Do not push harder when access is denied. Reduce how much you scr
 
 These are ideas, not commitments:
 
-- Connect the dashboard to the live API and add the missing read endpoints (sellers, runs, schedules, analytics)
-- Command-line flags for the pipeline, so the dashboard can start runs
-- Make the test suite run offline against synthetic HTML
+- Expand offline integration coverage for the dashboard job lifecycle
 - Support Amazon marketplaces other than `amazon.in`
 
 ## License

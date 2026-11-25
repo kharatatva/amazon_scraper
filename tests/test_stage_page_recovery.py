@@ -101,6 +101,7 @@ class StagePageRecoveryTests(unittest.IsolatedAsyncioTestCase):
                  patch.object(search_page_scraper, "BrowserLifecycle", FakeLifecycle), \
                  patch.object(search_page_scraper, "get_or_create_keyword", return_value=1), \
                  patch.object(search_page_scraper, "get_or_create_niche", return_value=2), \
+                 patch.object(search_page_scraper, "get_search_run_config", return_value={}), \
                  patch.object(search_page_scraper, "link_niche_keyword"), \
                  patch.object(search_page_scraper, "update_search_run"), \
                  patch.object(search_page_scraper, "fetch_page", side_effect=fake_fetch), \
@@ -135,6 +136,7 @@ class StagePageRecoveryTests(unittest.IsolatedAsyncioTestCase):
                  patch.object(search_page_scraper, "BrowserLifecycle", FakeLifecycle), \
                  patch.object(search_page_scraper, "get_or_create_keyword", return_value=1), \
                  patch.object(search_page_scraper, "get_or_create_niche", return_value=2), \
+                 patch.object(search_page_scraper, "get_search_run_config", return_value={}), \
                  patch.object(search_page_scraper, "link_niche_keyword"), \
                  patch.object(search_page_scraper, "update_search_run"), \
                  patch.object(search_page_scraper, "fetch_page", side_effect=fake_fetch):

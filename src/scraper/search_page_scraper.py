@@ -36,6 +36,7 @@ from src.scraper.browser import (
 
 from src.storage.db import (
     create_search_run,
+    get_search_run_config,
     update_search_run,
     get_or_create_keyword,
     get_or_create_niche,
@@ -124,6 +125,7 @@ async def fetch_search_results(
     proxy: str = None,
     run_id: int = None,
     proxy_manager: ProxyManager = None,
+    keep_run_active: bool = False,
 ) -> int:
     """Scrape Amazon search pages with centralized proxy retries."""
 
@@ -177,6 +179,10 @@ async def fetch_search_results(
         logger.info(f"Created standalone search run ID: {run_id}")
 
     search_run_id = run_id
+    saved_config = get_search_run_config(search_run_id)
+    execution_metadata = saved_config.get("_nichescope")
+    if isinstance(execution_metadata, dict):
+        run_config["_nichescope"] = execution_metadata
 
     # Stage: scrape_search
     update_search_run(
@@ -369,7 +375,7 @@ async def fetch_search_results(
                 search_run_id=search_run_id,
                 pages_scraped=pages_scraped,
                 products_found=products_found,
-                status=status,
+                status="running" if keep_run_active else status,
                 notes=(
                     None
                     if pages_scraped
@@ -397,7 +403,7 @@ async def fetch_search_results(
                 search_run_id=search_run_id,
                 pages_scraped=pages_scraped,
                 products_found=products_found,
-                status="failed",
+                status="running" if keep_run_active else "failed",
                 notes=redact_error(e),
                 current_stage="scrape_search",
                 current_task="Search scraping failed",

@@ -40,6 +40,7 @@ def initialize_database():
 
     # Ensure the parent directory for the database exists.
     DB_FILE.parent.mkdir(parents=True, exist_ok=True)
+    MIGRATIONS_DIR.mkdir(parents=True, exist_ok=True)
 
     logger.info("Initializing database...")
     logger.info("Database file: %s", DB_FILE)

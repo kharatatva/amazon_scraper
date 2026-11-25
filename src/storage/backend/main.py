@@ -11,6 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.requests import Request
 from fastapi.responses import JSONResponse
 
+from src import config as scraper_config
 from src.config import LOG_DIR
 from src.logger import configure_logging, logger
 from src.storage.backend import dashboard_queries as dashboard
@@ -20,18 +21,34 @@ from src.storage.backend.demand_service import (
     get_demand_backfill_status,
     start_background_services,
 )
+from src.storage.backend.job_manager import start_scrape_worker
+from src.storage.backend.environment_setup import (
+    check_environment,
+    get_environment_status,
+    get_initialization_status,
+    prepare_local_environment,
+    readiness_error,
+    start_initialization,
+)
 from src.storage.backend.routes.scrape import router as scrape_router
+from src.storage.backend.scraper_settings import (
+    get_scraper_settings,
+    reset_scraper_settings,
+    save_scraper_settings,
+)
 from src.storage.db import get_connection
-from src.storage.demand_schema import ensure_demand_schema
 from src.storage.queries import get_price_history, get_rank_history, upsert_scheduled_niche
 
 app = FastAPI(title="NicheScope Dashboard API", version="1.0.0")
-configure_logging(LOG_DIR / "api.log")
+try:
+    configure_logging(LOG_DIR / "api.log")
+except OSError:
+    logger.warning("API log file is unavailable; continuing with console logging.")
 app.include_router(scrape_router)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:5173"],
-    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type"],
 )
 
@@ -55,6 +72,64 @@ def api_health() -> dict[str, str]:
     with dashboard._connect() as conn:
         conn.execute("SELECT 1").fetchone()
     return {"status": "ok", "database": "connected"}
+
+
+def environment_payload(*, deep_browser_check: bool = False) -> dict:
+    """Build a fresh component report and include current setup progress."""
+    return {
+        "environment": get_environment_status(deep_browser_check=deep_browser_check),
+        "operation": get_initialization_status(),
+    }
+
+
+@app.get("/api/environment")
+def api_environment_status() -> dict:
+    """Return live readiness checks and any active setup operation."""
+    return environment_payload()
+
+
+@app.post("/api/environment/check")
+def api_check_environment() -> dict:
+    """Run the explicit, launch-tested environment verification action."""
+    return {
+        "environment": check_environment(deep_browser_check=True),
+        "operation": get_initialization_status(),
+    }
+
+
+@app.post("/api/environment/initialize", status_code=202)
+def api_initialize_environment(payload: dict | None = None) -> dict:
+    """Initialize or repair the environment through the shared setup service."""
+    if payload is None:
+        payload = {}
+    if not isinstance(payload, dict) or not isinstance(payload.get("repair", False), bool):
+        raise HTTPException(status_code=422, detail="repair must be a boolean.")
+    operation = start_initialization(repair=payload.get("repair", False))
+    return {"environment": get_environment_status(), "operation": operation}
+
+
+@app.get("/api/scraper/settings")
+def api_scraper_settings() -> dict:
+    """Return editable scraper configuration and fixed project paths."""
+    return get_scraper_settings()
+
+
+@app.put("/api/scraper/settings")
+def api_save_scraper_settings(payload: dict) -> dict:
+    """Validate and persist scraper configuration submitted by the dashboard."""
+    try:
+        return save_scraper_settings(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/api/scraper/settings/reset")
+def api_reset_scraper_settings() -> dict:
+    """Restore config.py defaults for dashboard-managed scraper settings."""
+    try:
+        return reset_scraper_settings()
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
 @app.get("/api/dashboard")
@@ -178,7 +253,7 @@ def api_get_seller(seller_id: int, page: int = Query(default=1, ge=1),
 @app.get("/api/runs")
 def api_list_runs(
     niche_id: int | None = Query(default=None, ge=1), keyword_id: int | None = Query(default=None, ge=1),
-    status: Literal["success", "partial", "failed", "running"] | None = None,
+    status: Literal["success", "partial", "failed", "running", "queued"] | None = None,
     start_date: date | None = None, end_date: date | None = None,
     page: int = Query(default=1, ge=1), page_size: int = Query(default=50, ge=1, le=100),
 ) -> dict:
@@ -195,6 +270,26 @@ def api_get_run(run_id: int) -> dict:
     if run is None:
         raise HTTPException(status_code=404, detail="Search run not found")
     return run
+
+
+@app.get("/api/runs/{run_id}/logs")
+def api_get_run_logs(run_id: int) -> dict:
+    """Return the most recent lines from the captured process output for a run."""
+    if dashboard.get_run(run_id) is None:
+        raise HTTPException(status_code=404, detail="Search run not found")
+    path = LOG_DIR / "runs" / f"{run_id}.log"
+    if not path.is_file():
+        return {"run_id": run_id, "lines": []}
+    try:
+        with path.open("rb") as log_file:
+            log_file.seek(0, 2)
+            size = log_file.tell()
+            log_file.seek(max(0, size - 128 * 1024))
+            content = log_file.read().decode("utf-8", errors="replace")
+    except OSError:
+        logger.exception("Could not read run log | run_id=%s", run_id)
+        raise HTTPException(status_code=500, detail="Could not read the run log.")
+    return {"run_id": run_id, "lines": content.splitlines()[-250:]}
 
 
 @app.get("/api/errors")
@@ -240,14 +335,17 @@ def api_create_demand_schedule(payload: dict) -> dict:
     try:
         niche_id = int(payload["nicheId"])
         keyword_id = int(payload["keywordId"])
-        pages = int(payload.get("pages", 10))
-        products = int(payload.get("products", 100))
+        pages = int(payload.get("pages", scraper_config.MAX_PAGES_TO_CRAWL))
+        products = int(payload.get("products", scraper_config.MAX_DETAIL_PAGES_PER_RUN))
         run_times = str(payload.get("runTimes", "08:00,20:00"))
         timezone_name = str(payload.get("timezone", "Asia/Kolkata"))
     except (KeyError, TypeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail="nicheId and keywordId must be integers.") from exc
-    if pages < 1 or pages > 100 or products < 1 or products > 10000:
-        raise HTTPException(status_code=400, detail="pages must be 1–100 and products 1–10000.")
+    if pages < 1 or pages > scraper_config.MAX_PAGES_TO_CRAWL or products < 1 or products > scraper_config.MAX_DETAIL_PAGES_PER_RUN:
+        raise HTTPException(
+            status_code=400,
+            detail=f"pages must be 1–{scraper_config.MAX_PAGES_TO_CRAWL} and products 1–{scraper_config.MAX_DETAIL_PAGES_PER_RUN}.",
+        )
     conn = get_connection()
     try:
         linked = conn.execute(
@@ -297,10 +395,30 @@ def api_analytics(niche_id: int | None = Query(default=None, ge=1), start_date: 
     return dashboard.analytics(niche_id=niche_id, start_date=start, end_date=end, limit=limit, currency=currency)
 
 
+def start_operational_services() -> None:
+    """Start data workers when database checks pass, even if Chromium is absent."""
+    status = get_environment_status()
+    database = next(item for item in status["components"] if item["id"] == "database")
+    if database["status"] != "ready":
+        return
+    try:
+        enqueue_demand_backfill_if_needed()
+        start_scrape_worker()
+        start_background_services()
+    except Exception:
+        logger.exception("Could not start dashboard background services.")
+
+
 @app.on_event("startup")
 def start_dashboard_workers() -> None:
-    """Start the background workers used by dashboard services."""
-    ensure_demand_schema()
-    enqueue_demand_backfill_if_needed()
-    start_background_services()
+    """Prepare local storage and run real startup checks without hiding the UI."""
+    try:
+        prepare_local_environment()
+    except Exception:
+        logger.exception("Automatic local storage setup did not complete.")
+    try:
+        get_environment_status(deep_browser_check=True)
+    except Exception:
+        logger.exception("Startup environment verification did not complete.")
+    start_operational_services()
 

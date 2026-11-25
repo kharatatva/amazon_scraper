@@ -104,4 +104,10 @@ def log_context(*, run_id: int | str | None = None, stage: str | None = None):
         _stage.reset(stage_token)
 
 
-configure_logging()
+try:
+    configure_logging()
+except OSError:
+    # Keep the local API reachable so Settings can report a storage-permission
+    # problem instead of failing during module import.
+    logger.addHandler(logging.StreamHandler())
+    logger.setLevel(logging.INFO)

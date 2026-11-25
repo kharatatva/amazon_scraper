@@ -1,12 +1,13 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useLocation, useRoute } from "wouter";
-import { Activity, AlertTriangle, Check, Clock3, Database, Download, ExternalLink, Gauge, Layers3, PackageCheck, Play, RefreshCw, Search, Server, Store, Target, TimerReset, XCircle } from "lucide-react";
+import { Activity, AlertTriangle, Check, Clock3, Database, Download, ExternalLink, Gauge, Layers3, PackageCheck, Play, Plus, RefreshCw, Search, Server, Store, Target, TimerReset, X, XCircle } from "lucide-react";
 import { toast } from "sonner";
+import { EnvironmentMaintenance } from "@/components/EnvironmentSetup";
 import { useSettings } from "@/contexts/SettingsContext";
 import { EmptyState, ErrorState, FilterBar, MetricCard, PageHeader, Panel, ProductGlyph, ProductTable, RunTable, ScoreChip, StatusPill } from "@/components/dashboard";
 import { Visualization, chartMetric, type ChartRow, type VisualMetric } from "@/components/Visualization";
 import { ProductComparison } from "@/components/ProductComparison";
-import { api, type ProductFilters, type RunFilters } from "@/lib/api";
+import { api, type ProductFilters, type RunFilters, type ScraperSettingsData } from "@/lib/api";
 import type { DashboardSnapshot, DemandBackfillJob, DemandTrackerData, Niche, Product, RunStatus, Schedule, SearchRun } from "@/lib/domain";
 import { formatCompact, formatCurrency, formatDate, formatNumber } from "@/lib/format";
 
@@ -307,12 +308,51 @@ export function RunsPage() {
   const filters: RunFilters = { page, page_size: 25, status: status ? status as RunStatus : undefined, niche_id: nicheId ? Number(nicheId) : undefined, keyword_id: keywordId ? Number(keywordId) : undefined, start_date: startDate || undefined, end_date: endDate || undefined };
   const state = useRemote(JSON.stringify(filters), () => api.getRuns(filters)); const niches = useRemote("run-niches", () => api.getNiches()); const filterOptions = useRemote("run-filter-options", () => api.getProductFilters());
   useEffect(() => { setPage(1); }, [status, nicheId, keywordId, startDate, endDate]);
-  return <><PageHeader eyebrow="Operations / Runs" title="Search run history" description="Pipeline state and counts come directly from search_runs. Only success, partial, failed, and running statuses are accepted." actions={<Link href="/scraper" className="primary-button"><Play size={13} /> Start a run</Link>} /><div className="panel mb-5 grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5"><Select label="Status" value={status} onChange={setStatus}><option value="">All statuses</option><option value="success">Success</option><option value="partial">Partial</option><option value="failed">Failed</option><option value="running">Running</option></Select><Select label="Niche" value={nicheId} onChange={setNicheId}><option value="">All niches</option>{niches.data?.map((niche) => <option key={niche.id} value={niche.id}>{niche.name}</option>)}</Select><Select label="Keyword" value={keywordId} onChange={setKeywordId}><option value="">All keywords</option>{filterOptions.data?.keywords.map((item) => <option key={item.id} value={item.id}>{item.text}</option>)}</Select><label><span className="field-label">From date</span><input type="date" className="dark-input" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label><label><span className="field-label">To date</span><input type="date" className="dark-input" value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label><button className="secondary-button" onClick={() => { setStatus(""); setNicheId(""); setKeywordId(""); setStartDate(""); setEndDate(""); }}>Reset filters</button></div><RequestState state={state}>{(result) => <Panel title={`${formatNumber(result.total)} search runs`} description="Newest stored timestamp first"><RunTable runs={result.items} />{!result.items.length && <EmptyState title="No runs match these filters" description="Clear the filters or start a scraper run." icon={Activity} />}<Pagination page={result.page} pageSize={result.page_size} total={result.total} onChange={setPage} /></Panel>}</RequestState></>;
+  return <><PageHeader eyebrow="Operations / Runs" title="Search run history" description="Pipeline state and counts come directly from search_runs. Queued, running, success, partial, and failed statuses are shown." actions={<Link href="/scraper" className="primary-button"><Play size={13} /> Start a run</Link>} /><div className="panel mb-5 grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-5"><Select label="Status" value={status} onChange={setStatus}><option value="">All statuses</option><option value="success">Success</option><option value="partial">Partial</option><option value="failed">Failed</option><option value="queued">Queued</option><option value="running">Running</option></Select><Select label="Niche" value={nicheId} onChange={setNicheId}><option value="">All niches</option>{niches.data?.map((niche) => <option key={niche.id} value={niche.id}>{niche.name}</option>)}</Select><Select label="Keyword" value={keywordId} onChange={setKeywordId}><option value="">All keywords</option>{filterOptions.data?.keywords.map((item) => <option key={item.id} value={item.id}>{item.text}</option>)}</Select><label><span className="field-label">From date</span><input type="date" className="dark-input" value={startDate} onChange={(event) => setStartDate(event.target.value)} /></label><label><span className="field-label">To date</span><input type="date" className="dark-input" value={endDate} onChange={(event) => setEndDate(event.target.value)} /></label><button className="secondary-button" onClick={() => { setStatus(""); setNicheId(""); setKeywordId(""); setStartDate(""); setEndDate(""); }}>Reset filters</button></div><RequestState state={state}>{(result) => <Panel title={`${formatNumber(result.total)} search runs`} description="Newest stored timestamp first"><RunTable runs={result.items} />{!result.items.length && <EmptyState title="No runs match these filters" description="Clear the filters or start a scraper run." icon={Activity} />}<Pagination page={result.page} pageSize={result.page_size} total={result.total} onChange={setPage} /></Panel>}</RequestState></>;
 }
 
 export function RunDetailPage() {
-  const [, params] = useRoute("/runs/:id"); const id = Number(params?.id); const state = useRemote(`run:${id}`, () => api.getRun(id));
-  return <><Link href="/runs" className="back-link">← Run history</Link><RequestState state={state}>{(run) => <><PageHeader eyebrow="Search run detail" title={`Run #${run.id}`} description={`${run.niche_name} · ${run.keyword ?? "Keyword unavailable"} · ${formatDate(run.run_timestamp, true)}`} actions={<StatusPill status={run.status} />} /><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><MetricCard label="Pages scraped" value={formatNumber(run.pages_scraped)} icon={Database} accent="cyan" /><MetricCard label="Products found" value={formatNumber(run.products_found)} icon={PackageCheck} accent="violet" /><MetricCard label="Scrape errors" value={formatNumber(run.error_count)} icon={AlertTriangle} accent="amber" /><MetricCard label="Progress" value={run.status === "running" ? "In progress" : run.status} icon={Activity} accent="green" detail="No percentage is inferred" /></div><Panel className="mt-5" title="Pipeline state" description="Progress fields as reported by the pipeline"><div className="grid gap-4 p-5 sm:grid-cols-2"><div><p className="field-label">Current stage</p><p className="text-sm text-slate-200">{run.current_stage ?? "Not reported"}</p></div><div><p className="field-label">Current task</p><p className="text-sm text-slate-200">{run.current_task ?? "Not reported"}</p></div><div className="sm:col-span-2"><p className="field-label">Notes</p><p className="whitespace-pre-wrap text-xs text-slate-400">{run.notes ?? "No notes recorded."}</p></div></div></Panel><Panel className="mt-5" title={`Scrape errors (${run.errors.length})`} description="Errors are related to this run through search_run_id"><div className="data-table-wrap"><table className="data-table"><thead><tr><th>Time</th><th>Type</th><th>Message</th><th>URL</th><th>Attempt</th></tr></thead><tbody>{run.errors.map((error) => <tr key={error.id}><td>{formatDate(error.occurred_at, true)}</td><td>{error.error_type ?? "Unknown"}</td><td className="whitespace-normal">{error.error_message ?? "No message"}</td><td className="max-w-[250px] truncate">{error.url ?? "N/A"}</td><td>{error.attempt_number ?? "N/A"}</td></tr>)}</tbody></table>{!run.errors.length && <EmptyState title="No scrape errors" description="This run has no associated error rows." icon={Check} />}</div></Panel></>}</RequestState></>;
+  const [, params] = useRoute("/runs/:id");
+  const id = Number(params?.id);
+  const state = useRemote("run:" + id, () => api.getRun(id));
+  const logs = useRemote("run-logs:" + id, () => api.getRunLogs(id));
+  const status = state.data?.status;
+  useEffect(() => {
+    if (status !== "running" && status !== "queued") return;
+    const timer = window.setInterval(() => state.retry(), 2500);
+    return () => window.clearInterval(timer);
+  }, [id, status]);
+  useEffect(() => {
+    if (status !== "running" && status !== "queued") return;
+    const timer = window.setInterval(() => logs.retry(), 2500);
+    return () => window.clearInterval(timer);
+  }, [id, status]);
+
+  return <><Link href="/runs" className="back-link">Back to run history</Link><RequestState state={state}>{(run) => <>
+    <PageHeader eyebrow="Search run detail" title={"Run #" + run.id} description={run.niche_name + " / " + (run.keyword ?? "Keyword unavailable") + " / " + formatDate(run.run_timestamp, true)} actions={<StatusPill status={run.status} />} />
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <MetricCard label="Pages scraped" value={formatNumber(run.pages_scraped)} icon={Database} accent="cyan" detail={run.requested_pages ? "Requested " + run.requested_pages : undefined} />
+      <MetricCard label="Products discovered" value={formatNumber(run.products_found)} icon={PackageCheck} accent="violet" />
+      <MetricCard label="Products processed" value={formatNumber(run.products_processed)} icon={Check} accent="green" detail="Persisted snapshots" />
+      <MetricCard label="Scrape errors" value={formatNumber(run.error_count)} icon={AlertTriangle} accent="amber" />
+      <MetricCard label="Duration" value={run.duration_seconds == null ? "N/A" : Math.floor(run.duration_seconds / 60) + "m " + (run.duration_seconds % 60) + "s"} icon={Clock3} accent="cyan" detail={run.started_at ? "Started " + formatDate(run.started_at, true) : "Waiting to start"} />
+    </div>
+    <Panel className="mt-5" title="Pipeline state" description="Execution status and counts come from the persisted run and its snapshots.">
+      <div className="grid gap-4 p-5 sm:grid-cols-2">
+        <div><p className="field-label">Current stage</p><p className="text-sm text-slate-200">{run.current_stage ?? "Not reported"}</p></div>
+        <div><p className="field-label">Current task</p><p className="text-sm text-slate-200">{run.current_task ?? "Not reported"}</p></div>
+        <div><p className="field-label">Requested details</p><p className="text-sm text-slate-200">{run.requested_products ?? "Not reported"} products maximum</p></div>
+        <div><p className="field-label">Products processed</p><p className="text-sm text-slate-200">{run.products_processed ?? 0} persisted snapshots</p></div>
+        <div className="sm:col-span-2"><p className="field-label">Notes</p><p className="whitespace-pre-wrap text-xs text-slate-400">{run.notes ?? "No notes recorded."}</p></div>
+      </div>
+    </Panel>
+    <Panel className="mt-5" title="Execution logs" description="Captured process output for this run.">
+      {logs.error ? <p className="p-4 text-xs text-rose-300">{logs.error.message}</p> : <pre className="max-h-[360px] overflow-auto whitespace-pre-wrap break-words p-4 font-mono text-[10px] leading-5 text-slate-400">{logs.data?.lines.length ? logs.data.lines.join(String.fromCharCode(10)) : run.status === "queued" ? "Waiting for the scraper worker..." : "No process output has been recorded."}</pre>}
+    </Panel>
+    <Panel className="mt-5" title={"Scrape errors (" + run.errors.length + ")"} description="Errors are related to this run through search_run_id.">
+      <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Time</th><th>Type</th><th>Message</th><th>URL</th><th>Attempt</th></tr></thead><tbody>{run.errors.map((error) => <tr key={error.id}><td>{formatDate(error.occurred_at, true)}</td><td>{error.error_type ?? "Unknown"}</td><td className="whitespace-normal">{error.error_message ?? "No message"}</td><td className="max-w-[250px] truncate">{error.url ?? "N/A"}</td><td>{error.attempt_number ?? "N/A"}</td></tr>)}</tbody></table>{!run.errors.length && <EmptyState title="No scrape errors" description="This run has no associated error rows." icon={Check} />}</div>
+    </Panel>
+  </>}</RequestState></>;
 }
 
 export function ErrorsPage() {
@@ -331,6 +371,7 @@ export function SchedulesPage() {
 
 export function DemandTrackerPage() {
   const niches = useRemote<Niche[]>("demand-tracker-niches", () => api.getNiches());
+  const scraperSettings = useRemote("demand-scraper-limits", () => api.getScraperSettings());
   const [nicheId, setNicheId] = useState(""); const [keywordId, setKeywordId] = useState("");
   const [demandPage, setDemandPage] = useState(1);
   const [pages, setPages] = useState("10"); const [products, setProducts] = useState("100");
@@ -338,8 +379,14 @@ export function DemandTrackerPage() {
   const [busy, setBusy] = useState(false); const [backfillBusy, setBackfillBusy] = useState(false);
   const [activeRunId, setActiveRunId] = useState<number | null>(null);
   const [backfill, setBackfill] = useState<DemandBackfillJob | null>(null);
+  const pageLimit = typeof scraperSettings.data?.settings.MAX_PAGES_TO_CRAWL === "number" ? scraperSettings.data.settings.MAX_PAGES_TO_CRAWL : 10;
+  const productLimit = typeof scraperSettings.data?.settings.MAX_DETAIL_PAGES_PER_RUN === "number" ? scraperSettings.data.settings.MAX_DETAIL_PAGES_PER_RUN : 100;
   const selectedNiche = niches.data?.find((item) => item.id === Number(nicheId));
   const demand = useRemote<DemandTrackerData>(`demand:${nicheId}:${demandPage}`, () => api.getDemand(nicheId ? Number(nicheId) : undefined, demandPage));
+  useEffect(() => {
+    setPages((current) => Number(current) > pageLimit ? String(pageLimit) : current);
+    setProducts((current) => Number(current) > productLimit ? String(productLimit) : current);
+  }, [pageLimit, productLimit]);
   useEffect(() => {
     if (!nicheId && demand.data?.selected_niche) setNicheId(String(demand.data.selected_niche.id));
   }, [nicheId, demand.data?.selected_niche?.id]);
@@ -362,7 +409,7 @@ export function DemandTrackerPage() {
       try {
         const run = await api.getRun(activeRunId);
         if (!live) return;
-        if (run.status === "running") timer = window.setTimeout(() => void poll(), 3000);
+        if (run.status === "running" || run.status === "queued") timer = window.setTimeout(() => void poll(), 3000);
         else { setActiveRunId(null); demand.retry(); toast.success(`Demand snapshot saved in run #${activeRunId}`); }
       } catch { if (live) timer = window.setTimeout(() => void poll(), 5000); }
     };
@@ -406,12 +453,12 @@ export function DemandTrackerPage() {
           <div className="space-y-4 p-5">
             <Select label="Niche" value={nicheId} onChange={(value) => { setNicheId(value); setDemandPage(1); }}><option value="">Select niche</option>{niches.data?.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select>
             <Select label="Keyword" value={keywordId} onChange={setKeywordId}><option value="">Select keyword</option>{selectedNiche?.keywords.map((item) => <option key={item.id} value={item.id}>{item.text}</option>)}</Select>
-            <div className="grid grid-cols-2 gap-3"><label><span className="field-label">Pages per run</span><input className="dark-input" type="number" min="1" max="100" value={pages} onChange={(event) => setPages(event.target.value)} /></label><label><span className="field-label">Product limit</span><input className="dark-input" type="number" min="1" max="10000" value={products} onChange={(event) => setProducts(event.target.value)} /></label></div>
-            <button className="primary-button w-full justify-center" disabled={busy || !nicheId || !keywordId || Number(pages) < 1 || Number(products) < 1} onClick={() => void startDemandScrape()}><Play size={13} fill="currentColor" />{busy ? "Working…" : "Collect fresh demand data"}</button>
+            <div className="grid grid-cols-2 gap-3"><label><span className="field-label">Pages per run (1–{pageLimit})</span><input className="dark-input" type="number" min="1" max={pageLimit} value={pages} onChange={(event) => setPages(event.target.value)} /></label><label><span className="field-label">Product limit (1–{productLimit})</span><input className="dark-input" type="number" min="1" max={productLimit} value={products} onChange={(event) => setProducts(event.target.value)} /></label></div>
+            <button className="primary-button w-full justify-center" disabled={busy || !nicheId || !keywordId || Number(pages) < 1 || Number(pages) > pageLimit || Number(products) < 1 || Number(products) > productLimit} onClick={() => void startDemandScrape()}><Play size={13} fill="currentColor" />{busy ? "Working…" : "Collect fresh demand data"}</button>
             <div className="border-t border-white/[0.07] pt-4">
               <p className="text-xs font-medium text-slate-300">Twice daily schedule <span className="ml-1 text-[10px] text-slate-600">Asia/Kolkata</span></p>
               <div className="mt-3 grid grid-cols-2 gap-3"><label><span className="field-label">First run</span><input className="dark-input" type="time" value={morningTime} onChange={(event) => setMorningTime(event.target.value)} /></label><label><span className="field-label">Second run</span><input className="dark-input" type="time" value={eveningTime} onChange={(event) => setEveningTime(event.target.value)} /></label></div>
-              <button className="secondary-button mt-3 w-full justify-center" disabled={busy || !nicheId || !keywordId || morningTime === eveningTime || Number(pages) < 1 || Number(products) < 1} onClick={() => void saveSchedule()}><TimerReset size={13} /> Save two daily runs</button>
+              <button className="secondary-button mt-3 w-full justify-center" disabled={busy || !nicheId || !keywordId || morningTime === eveningTime || Number(pages) < 1 || Number(pages) > pageLimit || Number(products) < 1 || Number(products) > productLimit} onClick={() => void saveSchedule()}><TimerReset size={13} /> Save two daily runs</button>
               <p className="mt-2 text-[10px] leading-4 text-slate-600">Each slot creates one search run while the dashboard API is running. A slot is claimed once, and the worker skips it if that niche and keyword already have a running scrape.</p>
             </div>
           </div>
@@ -439,31 +486,223 @@ export function DemandTrackerPage() {
 }
 
 export function ScraperPage() {
-  const niches = useRemote("scraper-niches", () => api.getNiches()); const [nicheId, setNicheId] = useState(""); const [keywordId, setKeywordId] = useState("");
-  const [pages, setPages] = useState("10"); const [products, setProducts] = useState("100"); const [runId, setRunId] = useState<number | null>(null); const [run, setRun] = useState<SearchRun | null>(null); const [busy, setBusy] = useState(false); const [pollError, setPollError] = useState("");
-  const selectedNiche = niches.data?.find((item) => item.id === Number(nicheId));
-  useEffect(() => { if (!selectedNiche?.keywords.some((item) => item.id === Number(keywordId))) setKeywordId(selectedNiche?.keywords[0] ? String(selectedNiche.keywords[0].id) : ""); }, [nicheId, selectedNiche?.keywords.length]);
+  const niches = useRemote("scraper-niches", () => api.getNiches());
+  const scraperSettings = useRemote("scraper-limits", () => api.getScraperSettings());
+  const [nicheName, setNicheName] = useState("");
+  const [keywords, setKeywords] = useState([""]);
+  const [pages, setPages] = useState("10");
+  const [products, setProducts] = useState("100");
+  const [runIds, setRunIds] = useState<number[]>([]);
+  const [runs, setRuns] = useState<SearchRun[]>([]);
+  const [activeRunId, setActiveRunId] = useState<number | null>(null);
+  const [logs, setLogs] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [pollError, setPollError] = useState("");
+  const pageLimit = typeof scraperSettings.data?.settings.MAX_PAGES_TO_CRAWL === "number" ? scraperSettings.data.settings.MAX_PAGES_TO_CRAWL : 10;
+  const productLimit = typeof scraperSettings.data?.settings.MAX_DETAIL_PAGES_PER_RUN === "number" ? scraperSettings.data.settings.MAX_DETAIL_PAGES_PER_RUN : 100;
+  const activeRun = runs.find((item) => item.id === activeRunId) ?? null;
+  const cleanedKeywords = keywords.map((item) => item.trim());
+  const duplicateKeywords = new Set(cleanedKeywords.map((item) => item.toLowerCase())).size !== cleanedKeywords.length;
+  const valid = Boolean(nicheName.trim())
+    && cleanedKeywords.length > 0
+    && cleanedKeywords.every(Boolean)
+    && !duplicateKeywords
+    && Number.isInteger(Number(pages))
+    && Number(pages) >= 1
+    && Number(pages) <= pageLimit
+    && Number.isInteger(Number(products))
+    && Number(products) >= 1
+    && Number(products) <= productLimit;
+
   useEffect(() => {
-    if (!runId) return;
-    let active = true; let timer: number | undefined;
+    setPages((current) => Number(current) > pageLimit ? String(pageLimit) : current);
+    setProducts((current) => Number(current) > productLimit ? String(productLimit) : current);
+  }, [pageLimit, productLimit]);
+
+  useEffect(() => {
+    if (!runIds.length) return;
+    let active = true;
+    let timer: number | undefined;
     const poll = async () => {
       try {
-        const value = await api.getRun(runId);
+        const values = await Promise.all(runIds.map((id) => api.getRun(id)));
         if (!active) return;
-        setRun(value); setPollError("");
-        if (value.status === "running") timer = window.setTimeout(() => void poll(), 2500);
-      } catch (error) { if (active) setPollError(error instanceof Error ? error.message : "Could not read run state"); }
+        setRuns(values);
+        setPollError("");
+        if (values.some((item) => item.status === "running" || item.status === "queued")) {
+          timer = window.setTimeout(() => void poll(), 2500);
+        }
+      } catch (error) {
+        if (active) {
+          setPollError(error instanceof Error ? error.message : "Could not read run state");
+          timer = window.setTimeout(() => void poll(), 5000);
+        }
+      }
     };
-    void poll(); return () => { active = false; if (timer) window.clearTimeout(timer); };
-  }, [runId]);
-  async function start() {
-    if (!nicheId || !keywordId) return;
-    setBusy(true); setPollError("");
-    try { const result = await api.startScrape({ nicheId: Number(nicheId), keywordId: Number(keywordId), pages: Number(pages), products: Number(products), recurring: false, frequency: "daily" }); setRunId(result.runId); toast.success(`Started search run #${result.runId}`); }
-    catch (error) { toast.error(error instanceof Error ? error.message : "Could not start scraper"); }
-    finally { setBusy(false); }
+    void poll();
+    return () => { active = false; if (timer) window.clearTimeout(timer); };
+  }, [runIds]);
+
+  useEffect(() => {
+    if (!activeRunId) { setLogs([]); return; }
+    let active = true;
+    let timer: number | undefined;
+    const pollLogs = async () => {
+      try {
+        const value = await api.getRunLogs(activeRunId);
+        if (active) setLogs(value.lines);
+      } catch {
+        if (active) setLogs(["Unable to load process logs."]);
+      }
+      if (active && (activeRun?.status === "running" || activeRun?.status === "queued")) {
+        timer = window.setTimeout(() => void pollLogs(), 2500);
+      }
+    };
+    void pollLogs();
+    return () => { active = false; if (timer) window.clearTimeout(timer); };
+  }, [activeRunId, activeRun?.status]);
+
+  function changeKeyword(index: number, value: string) {
+    setKeywords((items) => items.map((item, itemIndex) => itemIndex === index ? value : item));
   }
-  return <><PageHeader eyebrow="Operations / Scraper" title="Scraper control center" description="Starts the existing Python pipeline and reads run state from search_runs." actions={<Link href="/demand" className="secondary-button"><Target size={13} /> Demand tracker</Link>} />{niches.data?.length === 0 ? <EmptyState title="No niches are configured" description="The scraper starts from existing niche and keyword IDs. Create them through the project’s existing data setup first." icon={Database} /> : <div className="grid gap-5 xl:grid-cols-[0.8fr_1.2fr]"><Panel title="Start a pipeline run" description="The configured pages and product limits are passed to the existing scraper"><div className="space-y-4 p-5"><Select label="Niche" value={nicheId} onChange={setNicheId}><option value="">Select niche</option>{niches.data?.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select><Select label="Keyword" value={keywordId} onChange={setKeywordId}><option value="">Select keyword</option>{selectedNiche?.keywords.map((item) => <option key={item.id} value={item.id}>{item.text}</option>)}</Select><div className="grid grid-cols-2 gap-3"><label><span className="field-label">Pages</span><input className="dark-input" type="number" min="1" max="100" value={pages} onChange={(event) => setPages(event.target.value)} /></label><label><span className="field-label">Product limit</span><input className="dark-input" type="number" min="1" max="10000" value={products} onChange={(event) => setProducts(event.target.value)} /></label></div><button className="primary-button w-full justify-center" disabled={busy || !nicheId || !keywordId || Number(pages) < 1 || Number(products) < 1} onClick={() => void start()}><Play size={14} fill="currentColor" />{busy ? "Starting…" : "Start scrape"}</button><p className="text-[10px] leading-5 text-slate-600">Set recurring demand refreshes on the Demand Tracker page. Schedules run in India Standard Time.</p></div></Panel><Panel title="Run status" description="Only stored progress fields are shown"><div className="p-5">{run ? <><div className="flex items-center justify-between border-b border-white/[0.07] pb-4"><div><p className="font-mono text-lg text-cyan-300">Run #{run.id}</p><p className="mt-1 text-xs text-slate-500">{run.niche_name} · {run.keyword ?? "Keyword unavailable"}</p></div><StatusPill status={run.status} /></div><div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4"><div><p className="field-label">Pages scraped</p><p>{run.pages_scraped ?? "N/A"}</p></div><div><p className="field-label">Products found</p><p>{run.products_found ?? "N/A"}</p></div><div><p className="field-label">Current stage</p><p>{run.current_stage ?? "Not reported"}</p></div><div><p className="field-label">Current task</p><p>{run.current_task ?? "Not reported"}</p></div></div><Link className="mt-5 inline-block text-xs text-cyan-300" href={`/runs/${run.id}`}>Open run details</Link></> : <EmptyState title="No run selected" description="Start a scrape to monitor its actual pipeline state." icon={Activity} />}{pollError && <p className="mt-3 text-xs text-rose-300">{pollError}</p>}</div></Panel></div>}</>;
+
+  async function start() {
+    if (!valid || busy) return;
+    setBusy(true);
+    setPollError("");
+    try {
+      const result = await api.startScrape({
+        nicheName: nicheName.trim(),
+        keywords: cleanedKeywords,
+        pages: Number(pages),
+        products: Number(products),
+      });
+      const submittedIds = result.runIds ?? [result.runId];
+      setRunIds(submittedIds);
+      setRuns([]);
+      setActiveRunId(result.runId);
+      toast.success("Queued " + submittedIds.length + " scraper run(s)");
+      niches.retry();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not queue scraper");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <>
+    <PageHeader eyebrow="Operations / Scraper" title="Scraper control center" description="Start the existing Amazon pipeline with new or saved niches and one or more keywords." actions={<Link href="/demand" className="secondary-button"><Target size={13} /> Demand tracker</Link>} />
+    <div className="grid gap-5 xl:grid-cols-[0.85fr_1.15fr]">
+      <Panel title="Configure a scrape" description="The backend saves each keyword as its own searchable run.">
+        <div className="space-y-4 p-5">
+          <label className="block">
+            <span className="field-label">Category / niche</span>
+            <input
+              className="dark-input"
+              list="scraper-existing-niches"
+              maxLength={120}
+              value={nicheName}
+              onChange={(event) => setNicheName(event.target.value)}
+              placeholder="For example, kitchen storage"
+              aria-label="Category or niche"
+            />
+            <datalist id="scraper-existing-niches">
+              {niches.data?.map((item) => <option key={item.id} value={item.name} />)}
+            </datalist>
+          </label>
+          <div>
+            <div className="mb-2 flex items-center justify-between">
+              <span className="field-label">Amazon search keywords</span>
+              <span className="text-[10px] text-slate-600">Up to 10 per submission</span>
+            </div>
+            <div className="space-y-2">
+              {keywords.map((keyword, index) => (
+                <div className="flex gap-2" key={index}>
+                  <input
+                    className="dark-input"
+                    maxLength={160}
+                    value={keyword}
+                    onChange={(event) => changeKeyword(index, event.target.value)}
+                    placeholder={index === 0 ? "For example, under sink organizer" : "Add another keyword"}
+                    aria-label={"Search keyword " + (index + 1)}
+                  />
+                  <button
+                    className="secondary-button shrink-0 px-2"
+                    type="button"
+                    disabled={keywords.length === 1}
+                    aria-label={"Remove keyword " + (index + 1)}
+                    onClick={() => setKeywords((items) => items.filter((_, itemIndex) => itemIndex !== index))}
+                  ><X size={13} /></button>
+                </div>
+              ))}
+            </div>
+            <button
+              className="secondary-button mt-2"
+              type="button"
+              disabled={keywords.length >= 10}
+              onClick={() => setKeywords((items) => [...items, ""])}
+            ><Plus size={13} /> Add keyword</button>
+            {duplicateKeywords && <p className="mt-2 text-[10px] text-amber-300">Remove duplicate keywords before starting.</p>}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <label><span className="field-label">Search pages (1–{pageLimit})</span><input className="dark-input" type="number" min="1" max={pageLimit} step="1" value={pages} onChange={(event) => setPages(event.target.value)} /></label>
+            <label><span className="field-label">Product details (1–{productLimit})</span><input className="dark-input" type="number" min="1" max={productLimit} step="1" value={products} onChange={(event) => setProducts(event.target.value)} /></label>
+          </div>
+          <button className="primary-button w-full justify-center" disabled={busy || !valid} onClick={() => void start()}>
+            <Play size={14} fill="currentColor" />{busy ? "Queueing runs…" : "Start scraping"}
+          </button>
+          <p className="text-[10px] leading-5 text-slate-600">Each keyword creates one run. Runs execute one at a time through the existing Python scraper and use its persisted products, scores, and errors.</p>
+        </div>
+      </Panel>
+      <div className="space-y-5">
+        <Panel title="Execution monitor" description="Run state, counts, and process output are read from the backend.">
+          <div className="p-5">
+            {runs.length > 0 ? <>
+              <div className="space-y-2">
+                {runs.map((run) => (
+                  <button
+                    className={"flex w-full items-center justify-between gap-3 rounded-lg border p-3 text-left transition " + (activeRunId === run.id ? "border-cyan-300/25 bg-cyan-300/[0.06]" : "border-white/[0.07] bg-white/[0.02] hover:bg-white/[0.04]")}
+                    key={run.id}
+                    onClick={() => setActiveRunId(run.id)}
+                  >
+                    <span className="min-w-0">
+                      <span className="block font-mono text-xs text-cyan-300">Run #{run.id}</span>
+                      <span className="mt-1 block truncate text-[11px] text-slate-400">{run.keyword}</span>
+                    </span>
+                    <StatusPill status={run.status} />
+                  </button>
+                ))}
+              </div>
+              {activeRun && <>
+                <div className="mt-4 flex flex-wrap items-start justify-between gap-3 border-b border-white/[0.07] pb-4">
+                  <div>
+                    <p className="font-mono text-lg text-cyan-300">Run #{activeRun.id}</p>
+                    <p className="mt-1 text-xs text-slate-500">{activeRun.niche_name} · {activeRun.keyword ?? "Keyword unavailable"}</p>
+                  </div>
+                  <StatusPill status={activeRun.status} />
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
+                  <div><p className="field-label">Current stage</p><p className="text-xs text-slate-200">{activeRun.current_stage ?? "Not reported"}</p></div>
+                  <div><p className="field-label">Current task</p><p className="text-xs text-slate-200">{activeRun.current_task ?? "Not reported"}</p></div>
+                  <div><p className="field-label">{activeRun.status === "queued" ? "Queued at" : "Started"}</p><p className="text-xs text-slate-200">{formatDate(activeRun.started_at ?? (activeRun.status === "queued" ? activeRun.run_timestamp : null), true)}</p></div>
+                  <div><p className="field-label">Pages scraped</p><p className="text-xs text-slate-200">{activeRun.pages_scraped ?? 0}{activeRun.requested_pages ? " / " + activeRun.requested_pages : ""}</p></div>
+                  <div><p className="field-label">Products discovered</p><p className="text-xs text-slate-200">{activeRun.products_found ?? 0}</p></div>
+                  <div><p className="field-label">Products processed</p><p className="text-xs text-slate-200">{activeRun.products_processed ?? 0}</p></div>
+                  <div><p className="field-label">Errors</p><p className="text-xs text-slate-200">{activeRun.error_count}</p></div>
+                  <div><p className="field-label">Duration</p><p className="text-xs text-slate-200">{activeRun.duration_seconds == null ? "Not reported" : Math.floor(activeRun.duration_seconds / 60) + "m " + (activeRun.duration_seconds % 60) + "s"}</p></div>
+                </div>
+                <Link className="mt-4 inline-block text-xs text-cyan-300" href={"/runs/" + activeRun.id}>Open run details</Link>
+              </>}
+            </> : <EmptyState title="No run selected" description="Start a scrape to see its persisted execution state here." icon={Activity} />}
+            {pollError && <p className="mt-3 text-xs text-rose-300">{pollError}</p>}
+          </div>
+        </Panel>
+        <Panel title="Execution logs" description={activeRun ? "Latest captured process output for run #" + activeRun.id : "Select a run to inspect its process output."}>
+          <pre className="max-h-[300px] overflow-auto whitespace-pre-wrap break-words p-4 font-mono text-[10px] leading-5 text-slate-400">{logs.length ? logs.join(String.fromCharCode(10)) : activeRun?.status === "queued" ? "Waiting for the scraper worker…" : "No process output has been recorded yet."}</pre>
+        </Panel>
+      </div>
+    </div>
+  </>;
 }
 
 export function SystemPage() {
@@ -472,8 +711,109 @@ export function SystemPage() {
 }
 
 export function SettingsPage() {
-  const { settings, updateSettings, resetSettings } = useSettings(); const [name, setName] = useState(settings.displayName); const [tagline, setTagline] = useState(settings.tagline); const [productName, setProductName] = useState(settings.productName);
-  return <><PageHeader eyebrow="System / Settings" title="Dashboard preferences" description="These presentation preferences are stored in this browser and do not change scraper or scoring data." /><Panel title="Workspace identity" description="Local browser preferences"><div className="grid gap-4 p-5 sm:grid-cols-2"><label><span className="field-label">Product name</span><input className="dark-input" value={productName} onChange={(event) => setProductName(event.target.value)} /></label><label><span className="field-label">Display name</span><input className="dark-input" value={name} onChange={(event) => setName(event.target.value)} /></label><label className="sm:col-span-2"><span className="field-label">Tagline</span><input className="dark-input" value={tagline} onChange={(event) => setTagline(event.target.value)} /></label><div className="flex gap-2"><button className="primary-button" onClick={() => { updateSettings({ displayName: name, tagline, productName }); toast.success("Preferences saved in this browser"); }}>Save preferences</button><button className="secondary-button" onClick={() => { resetSettings(); setName("Arjun Shah"); setTagline("Amazon Product Research and Market Intelligence"); setProductName("NicheScope"); }}>Reset</button></div></div></Panel></>;
+  const { settings: identity, updateSettings, resetSettings } = useSettings();
+  const state = useRemote("scraper-settings", () => api.getScraperSettings());
+  const [draft, setDraft] = useState<Record<string, unknown> | null>(null);
+  const [jsonDraft, setJsonDraft] = useState<Record<string, string>>({});
+  const [numberDraft, setNumberDraft] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+  const [name, setName] = useState(identity.displayName);
+  const [tagline, setTagline] = useState(identity.tagline);
+  const [productName, setProductName] = useState(identity.productName);
+
+  useEffect(() => {
+    if (!state.data) return;
+    setDraft({ ...state.data.settings });
+    setJsonDraft(Object.fromEntries(state.data.fields.filter((field) => field.kind === "json").map((field) => [field.key, JSON.stringify(state.data?.settings[field.key], null, 2)])));
+    setNumberDraft(Object.fromEntries(state.data.fields.filter((field) => field.kind === "number").map((field) => [field.key, String(state.data?.settings[field.key] ?? "")] )));
+  }, [state.data]);
+
+  async function saveScraperSettings() {
+    if (!draft || !state.data) return;
+    const next = { ...draft };
+    try {
+      for (const field of state.data.fields) {
+        if (field.kind === "json") next[field.key] = JSON.parse(jsonDraft[field.key] ?? "");
+        if (field.kind === "number") next[field.key] = numberDraft[field.key] === "" ? "" : Number(numberDraft[field.key]);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? `Invalid JSON: ${error.message}` : "A JSON setting is invalid");
+      return;
+    }
+    setSaving(true);
+    try {
+      const saved = await api.saveScraperSettings(next);
+      setDraft({ ...saved.settings });
+      setJsonDraft(Object.fromEntries(saved.fields.filter((field) => field.kind === "json").map((field) => [field.key, JSON.stringify(saved.settings[field.key], null, 2)])));
+      setNumberDraft(Object.fromEntries(saved.fields.filter((field) => field.kind === "number").map((field) => [field.key, String(saved.settings[field.key] ?? "")])));
+      state.retry();
+      toast.success("Scraper settings saved. New runs will use them.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not save scraper settings");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function resetScraperSettings() {
+    setSaving(true);
+    try {
+      const reset = await api.resetScraperSettings();
+      setDraft({ ...reset.settings });
+      setJsonDraft(Object.fromEntries(reset.fields.filter((field) => field.kind === "json").map((field) => [field.key, JSON.stringify(reset.settings[field.key], null, 2)])));
+      setNumberDraft(Object.fromEntries(reset.fields.filter((field) => field.kind === "number").map((field) => [field.key, String(reset.settings[field.key] ?? "")])));
+      state.retry();
+      toast.success("Scraper settings restored to config.py defaults");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not reset scraper settings");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const hasScraperChanges = Boolean(state.data && draft && (
+    JSON.stringify(draft) !== JSON.stringify(state.data.settings)
+    || state.data.fields.some((field) => field.kind === "json" && jsonDraft[field.key] !== JSON.stringify(state.data?.settings[field.key], null, 2))
+    || state.data.fields.some((field) => field.kind === "number" && numberDraft[field.key] !== String(state.data?.settings[field.key] ?? ""))
+  ));
+
+  return <>
+    <PageHeader eyebrow="Operations / Scraper" title="Scraper settings" description="Edit scraper, browser, proxy, parser, and scoring values from config.py. Changes are stored by the API and apply to new runs." actions={<Link href="/scraper" className="secondary-button"><Play size={13} /> Scraper control</Link>} />
+    <div className="mb-5"><EnvironmentMaintenance /></div>
+    <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-cyan-300/15 bg-cyan-300/[0.04] px-4 py-3">
+      <p className="text-xs leading-5 text-slate-400">Running jobs keep the settings they started with. Path and database locations are shown below as read-only values.</p>
+      <div className="flex gap-2"><button className="secondary-button" type="button" disabled={saving || !state.data} onClick={() => void resetScraperSettings()}>Reset scraper defaults</button><button className="primary-button" type="button" disabled={saving || !hasScraperChanges} onClick={() => void saveScraperSettings()}>{saving ? "Saving…" : "Save scraper settings"}</button></div>
+    </div>
+    <RequestState state={state}>{(data: ScraperSettingsData) => draft ? <div className="space-y-5">
+      {data.groups.map((group) => <Panel key={group} title={group} description={group === "Scraping limits" ? "Page limits and concurrent work for each scraper run." : group === "Browser and pacing" ? "Browser identity, locale, retries, and request pacing." : group === "Proxy" ? "Proxy pool acquisition, validation, and recovery behavior." : group === "Parser selectors" ? "Fallback CSS selectors used to find Amazon listing data." : "Weights and targets used by the opportunity scoring pipeline."}>
+        <div className="grid gap-4 p-5 sm:grid-cols-2">
+          {data.fields.filter((field) => field.group === group).map((field) => {
+            const value = draft[field.key];
+            if (field.kind === "boolean") return <label key={field.key} className="flex items-start gap-3 rounded-lg border border-white/[0.07] bg-white/[0.02] p-3">
+              <input className="mt-0.5 h-4 w-4 accent-cyan-300" type="checkbox" checked={Boolean(value)} onChange={(event) => setDraft((current) => current ? { ...current, [field.key]: event.target.checked } : current)} />
+              <span><span className="block text-xs font-medium text-slate-200">{field.label}</span><span className="mt-1 block text-[10px] leading-4 text-slate-500">{field.description}</span></span>
+            </label>;
+            if (field.kind === "json") return <label key={field.key} className="sm:col-span-2">
+              <span className="field-label">{field.label}</span><span className="mb-2 block text-[10px] leading-4 text-slate-500">{field.description}</span>
+              <textarea className="dark-input min-h-44 font-mono text-[11px] leading-5" spellCheck={false} value={jsonDraft[field.key] ?? JSON.stringify(value, null, 2)} onChange={(event) => setJsonDraft((current) => ({ ...current, [field.key]: event.target.value }))} />
+            </label>;
+            if (field.kind === "number") return <label key={field.key}>
+              <span className="field-label">{field.label}</span><input className="dark-input" type="number" min={field.minimum} max={field.maximum} step={field.step ?? (Number.isInteger(field.default) ? 1 : "any")} value={numberDraft[field.key] ?? ""} onChange={(event) => setNumberDraft((current) => ({ ...current, [field.key]: event.target.value }))} />
+              <span className="mt-1 block text-[10px] leading-4 text-slate-600">{field.description}{field.minimum !== undefined && field.maximum !== undefined ? ` · ${field.minimum}–${field.maximum}` : ""}</span>
+            </label>;
+            return <label key={field.key}>
+              <span className="field-label">{field.label}</span><input className="dark-input" type="text" value={typeof value === "string" ? value : ""} onChange={(event) => setDraft((current) => current ? { ...current, [field.key]: event.target.value } : current)} />
+              <span className="mt-1 block text-[10px] leading-4 text-slate-600">{field.description}</span>
+            </label>;
+          })}
+        </div>
+      </Panel>)}
+      <Panel title="Project paths" description="These values come from the current backend installation and are read-only here.">
+        <div className="divide-y divide-white/[0.06] px-5">{Object.entries(data.system).map(([key, value]) => <div key={key} className="grid gap-1 py-3 sm:grid-cols-[190px_1fr]"><span className="field-label mb-0">{key}</span><code className="break-all text-[11px] text-slate-400">{value}</code></div>)}</div>
+      </Panel>
+    </div> : <PageLoading />}</RequestState>
+    <Panel className="mt-5" title="Workspace identity" description="Local browser preferences for the dashboard"><div className="grid gap-4 p-5 sm:grid-cols-2"><label><span className="field-label">Product name</span><input className="dark-input" value={productName} onChange={(event) => setProductName(event.target.value)} /></label><label><span className="field-label">Display name</span><input className="dark-input" value={name} onChange={(event) => setName(event.target.value)} /></label><label className="sm:col-span-2"><span className="field-label">Tagline</span><input className="dark-input" value={tagline} onChange={(event) => setTagline(event.target.value)} /></label><div className="flex gap-2"><button className="primary-button" onClick={() => { updateSettings({ displayName: name, tagline, productName }); toast.success("Preferences saved in this browser"); }}>Save preferences</button><button className="secondary-button" onClick={() => { resetSettings(); setName("Arjun Shah"); setTagline("Amazon Product Research and Market Intelligence"); setProductName("NicheScope"); }}>Reset</button></div></div></Panel>
+  </>;
 }
 
 export function LoginPage() {

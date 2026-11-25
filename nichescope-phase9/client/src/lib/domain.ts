@@ -1,4 +1,4 @@
-export type RunStatus = "success" | "partial" | "failed" | "running";
+export type RunStatus = "queued" | "success" | "partial" | "failed" | "running";
 export type FulfillmentType = "FBA" | "FBM" | "Unknown" | null;
 
 export interface Keyword { id: number; text: string }
@@ -28,6 +28,8 @@ export interface SearchRun {
   id: number; niche_id: number; niche_name: string; keyword_id: number | null; keyword: string | null;
   run_timestamp: string; pages_scraped: number | null; products_found: number | null; status: RunStatus;
   current_stage: string | null; current_task: string | null; notes: string | null; error_count: number;
+  products_processed?: number; requested_pages?: number | null; requested_products?: number | null;
+  started_at?: string | null; finished_at?: string | null; duration_seconds?: number | null;
 }
 export interface ScrapeError {
   id: number; search_run_id: number | null; url: string | null; error_type: string | null;
