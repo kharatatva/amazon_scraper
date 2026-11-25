@@ -15,15 +15,21 @@ Scrape Amazon India search results and product pages, store every observation as
 ![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white)
 ![Vite](https://img.shields.io/badge/Vite-646CFF?style=flat-square&logo=vite&logoColor=white)
 
-[Quick start](#quick-start) &nbsp;·&nbsp; [Dashboard](#dashboard) &nbsp;·&nbsp; [How scoring works](#how-scoring-works) &nbsp;·&nbsp; [Data model](#data-model) &nbsp;·&nbsp; [Status](#project-status) &nbsp;·&nbsp; [Responsible use](#responsible-use)
+[Why Amazon Scraper?](#why-amazon-scraper) | [Features](#features) | [Quick start](#quick-start) | [Dashboard](#dashboard) | [How scoring works](#how-scoring-works) | [Configuration](#configuration) | [Project status](#project-status) | [Responsible use](#responsible-use)
 
 <br>
-
-<img src="docs/images/nichescope-banner.svg" alt="NicheScope pipeline: collect, store, score, explore" width="900">
 
 </div>
 
 <br>
+
+## Why Amazon Scraper?
+
+Choosing a product from a search page is guesswork when you only look at one listing or one moment in time. Review counts alone do not show how concentrated a niche is, whether competing listings have quality gaps, or whether observed interest is changing.
+
+NicheScope turns public Amazon India listings into a repeatable research workflow. It collects search results and product details, saves dated snapshots locally, and lets you compare niches and products over time. Transparent demand, competition, and quality-gap signals help you decide what to investigate; you can inspect the underlying products before making your own decision.
+
+NicheScope is a research aid, not a sales or profit forecast. This project does not receive Amazon sales data, and a high score does not guarantee that a product will succeed.
 
 ## Overview
 
@@ -52,7 +58,7 @@ A run takes a niche and a search keyword, collects the first pages of Amazon Ind
 flowchart TB
     subgraph collect ["1. Collect (Playwright)"]
         direction LR
-        A["Search pages<br/>src/scraper/search.py"] --> B["Product pages<br/>src/scraper/product_detail.py"]
+        A["Search pages<br/>src/scraper/search_page_scraper.py"] --> B["Product pages<br/>src/scraper/product_page_scraper.py"]
     end
     subgraph process ["2. Process and score"]
         direction LR
@@ -319,6 +325,8 @@ Design notes:
 - **History by default.** Running a niche again adds new snapshots, which is what makes review velocity and trends possible.
 - **Local first.** The database is a SQLite file at `data/scraper_analysis.db`, created by `init_db` and evolved with numbered migrations in `migrations/`.
 
+Git tracks `data/.gitkeep` so the folder exists in a fresh checkout. The database, logs, screenshots, saved settings, and captured pages are runtime files and are intentionally excluded from Git.
+
 ## Configuration
 
 Scraper and scoring defaults live in [`src/config.py`](src/config.py) as plain Python variables. The Python code does not read a `.env` file.
@@ -329,10 +337,10 @@ Scraper and scoring defaults live in [`src/config.py`](src/config.py) as plain P
 | `MAX_DETAIL_PAGES_PER_RUN` | `100` | Maximum product detail pages selected for a run. |
 | `SEARCH_PAGE_CONCURRENCY` | `7` | Concurrent search-page tasks. |
 | `PRODUCT_PAGE_CONCURRENCY` | `10` | Concurrent product-detail tasks. |
-| `MIN_DELAY` / `MAX_DELAY` | `5` / `15` s | Random pause range between requests. |
+| `MIN_SCROLL_DELAY` / `MAX_SCROLL_DELAY` | `1` / `5` s | Random pause range between browser scrolls. |
 | `MAX_RETRIES` | `3` | Total fetch attempts, including the first. |
 | `HEADLESS` | `False` | Launch Chromium without a visible window. Set `True` on servers without a display. |
-| `PROXY_POOL_SIZE` | `20` | Number of validated public proxies kept in the pool. |
+| `PROXY_POOL_SIZE` | `60` | Proxy candidates requested for validation. |
 | `SCORE_WEIGHTS` | `0.4 / 0.3 / 0.3` | Demand, competition and quality-gap weights. |
 
 > [!TIP]
@@ -343,30 +351,32 @@ Scraper and scoring defaults live in [`src/config.py`](src/config.py) as plain P
 
 ## Project structure
 
-```text
+~~~text
 amazon_scraper/
-├── src/
-│   ├── config.py            Scraper and scoring settings
-│   ├── scraper/             Playwright search, product-detail, proxy and pacing code
-│   ├── parser/              Raw HTML to normalized product records
-│   ├── analysis/            Opportunity scoring
-│   ├── dashboards/          Legacy Streamlit components (not used by the React dashboard)
-│   └── storage/             SQLite access, migrations runner, FastAPI backend
-├── scripts/                 Pipeline, parser, scoring and schema-check entry points
-├── migrations/              Numbered SQLite migrations
-├── tests/                   Exploratory tests (see Project status)
-├── nichescope-phase9/       React + TypeScript dashboard (Vite)
-├── docs/                    README images
-└── data/                    Local database, logs and captured pages (git-ignored)
-```
-
+|-- src/
+|   |-- scraper/                 Playwright search, product-detail, proxy, and pacing code
+|   |-- parser/                  Amazon HTML parsing and normalization
+|   |-- analysis/                Demand, competition, and quality-gap scoring
+|   |-- storage/
+|       |-- backend/             FastAPI routes, setup checks, and job workers
+|-- scripts/                     Pipeline and maintenance commands
+|-- migrations/                  Numbered SQLite migrations
+|-- tests/                       Python and frontend tests
+|-- nichescope-phase9/
+|   |-- client/src/              React and TypeScript dashboard
+|-- docs/                        Architecture documentation
+|-- data/                        Local database, settings, logs, and captured pages
+~~~
 ## Project status
 
-NicheScope includes a working scraper, parser, scorer, local FastAPI service, and React dashboard. The dashboard can queue real scraper runs for new or saved niches and keywords:
+NicheScope includes the Amazon India scraper, HTML parser, scoring pipeline, local FastAPI service, SQLite storage, and React dashboard. The dashboard queues real runs for new or saved niches and keywords.
 
-- **Amazon India only.** Search URLs are fixed to `amazon.in`.
-- **Tests are not hermetic yet.** Several tests read captured HTML from a local `data/rendered_html/` folder or your real database, so `pytest` is not expected to pass on a fresh clone. Lint (`ruff check`) also reports open findings.
-- **Only `amazon.in` is supported.** Search URLs are hard-coded to it.
+- The first-run setup checks and maintenance repair actions cover the local application environment.
+- Runs, snapshots, scores, logs, and errors are stored locally so results can be reviewed later.
+- Amazon India (amazon.in) is the only supported marketplace.
+- Scores are research heuristics; they do not use Amazon sales or profit data.
+
+The repository includes Python tests, frontend unit tests, type checks, and lint checks. See [Development](#development) for commands.
 
 ## Troubleshooting
 
@@ -421,44 +431,24 @@ Stop and wait. Do not push harder when access is denied. Reduce how much you scr
 
 </details>
 
-## Responsible use
+## Development
 
-> [!WARNING]
-> Amazon may restrict automated access, and scraping may conflict with its terms. Review Amazon's terms and applicable laws before you run this project, keep request rates low, and stop if access is denied.
+Install the Python test and lint tools from the repository root:
 
-- Use NicheScope for personal research and learning, and at your own risk.
-- Do not commit credentials, `.env` files, databases, logs, saved Amazon pages or scraped product data. The provided `.gitignore` excludes them.
-- Free public proxies can observe the traffic that passes through them. Do not send logins or personal data through them.
-- The marketplace is Amazon India (`amazon.in`).
+~~~powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.\.venv\Scripts\python.exe -m pytest -p no:cacheprovider -q
+.\.venv\Scripts\python.exe -m ruff check .
+~~~
 
-## Roadmap ideas
+Run frontend checks from nichescope-phase9 after installing the dashboard packages:
 
-These are ideas, not commitments:
-
-- Expand offline integration coverage for the dashboard job lifecycle
-- Support Amazon marketplaces other than `amazon.in`
-
-## License
-
-MIT, as declared in the dashboard's `package.json`. Add a `LICENSE` file with your name before publishing.
-
-<br>
-
-<div align="center">
-<sub>Amazon and its affiliates do not sponsor or endorse this project.</sub>
-</div>
-<summary><b>Runs fail, stall or time out</b></summary>
-
-Proxies come from a free public list and are often slow or unavailable, so a failed run frequently succeeds when repeated. If it keeps failing, lower the two concurrency settings in `src/config.py`, or retry later.
-
-</details>
-
-<details>
-<summary><b>Amazon shows a CAPTCHA or "access denied" page</b></summary>
-
-Stop and wait. Do not push harder when access is denied. Reduce how much you scrape and try again later.
-
-</details>
+~~~powershell
+Set-Location nichescope-phase9
+corepack pnpm test
+corepack pnpm check
+corepack pnpm build
+~~~
 
 ## Responsible use
 
@@ -479,14 +469,10 @@ These are ideas, not commitments:
 
 ## License
 
-MIT, as declared in the dashboard's `package.json`. Add a `LICENSE` file with your name before publishing.
+This project is licensed under the [MIT License](LICENSE). Amazon and its affiliates do not sponsor or endorse it.
 
 <br>
 
 <div align="center">
 <sub>Amazon and its affiliates do not sponsor or endorse this project.</sub>
 </div>
-See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and pull request guidance. This project is licensed under the MIT License; see [LICENSE](LICENSE).
-=======
-# amazon_scraper
->>>>>>> bc93aa42ef3a35f67299712fc57c31be2541681b
